@@ -1,6 +1,6 @@
 # blog-ai-assistant
 
-博客站点的 **AI 阅读助手**：悬浮在文章页面上的对话助手，读者自带大模型 Provider 与访问凭据，浏览器直连调用。
+博客站点的 **12 助手**：悬浮在文章页面上的对话助手，读者自带大模型 Provider 与访问凭据，浏览器直连调用。
 
 博客本身是纯静态站点（Hexo + Chic 主题 + GitHub Pages），**不持有、不转发任何模型凭据**。密钥只存在读者这台浏览器的 `localStorage` 里，请求由浏览器直接发往读者自己填写的 Provider 端点。
 
@@ -23,6 +23,8 @@
 - **按小节问答**：自动带上读者当前所在小节的正文，回答里标注出自哪篇哪一节。
 - **站内检索**：先出文章标题目录，再按标题逐级下钻读取正文，而不是一次性灌整篇。
 - **划词提问**：选中正文里的句子可以直接追问。
+- **进程可打断**：回答期间发送键变成停止键，点一下立刻中断；中断后可「继续生成」接着写，或「回退本轮」把这一问撤掉、问题回到输入框。
+- **纯聊天模式**：输入区左侧的开关关掉后不注入文章、也不提供站内工具，只按提问直答；切换时弹一条 2 秒提示，状态记在本机。
 - **多会话**：会话列表在本地保存，可重命名、删除；回答进行中不会被切走。
 - **过程可见**：思考过程与工具调用默认收起成「查看过程」，展开能看到读了哪几段正文、命中多少条。
 
@@ -53,13 +55,13 @@
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `ai-assistant-main.js` | 1629 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
-| `ai-assistant-ui.js` | 2173 | 面板 DOM 与渲染（自写 Markdown 渲染，不引第三方库） |
-| `ai-assistant-provider.js` | 857 | Provider 适配：两种协议、SSE 解析、错误分型、密钥脱敏、usage 汇总 |
+| `ai-assistant-main.js` | 1771 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
+| `ai-assistant-ui.js` | 2298 | 面板 DOM 与渲染（自写 Markdown 渲染，不引第三方库） |
+| `ai-assistant-provider.js` | 911 | Provider 适配：两种协议、SSE 解析、错误分型、密钥脱敏、usage 汇总 |
 | `ai-assistant-context.js` | 306 | 小节切分与当前阅读位置识别（读标题 id，不做数据副本） |
 | `ai-assistant-tools.js` | 304 | 三个工具：`list_articles` / `search_articles` / `read_section` |
 | `ai-assistant-search.js` | 251 | 分层检索：本地 BM25 → 模型改写 → 模型重排 |
-| `ai-assistant.css` | 1846 | 界面样式 |
+| `ai-assistant.css` | 1919 | 界面样式 |
 | `ai-assistant-tokens.css` | 101 | 设计令牌（跟随 `body.dark-theme` 翻面） |
 
 样式令牌只写在 `ai-assistant-tokens.css` 一处，`ai-assistant.css` 只消费变量。
