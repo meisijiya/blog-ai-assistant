@@ -1738,6 +1738,15 @@
         transform: translateY(0);
     }
 
+    /*
+     * 点浮窗外面：抽屉往下压，只留头部一条（抓手 + 标题行 ≈ 64px）。
+     * 只改 transform，不动 height——再点一下浮窗就能回到原来的高度。
+     * 这和关闭是两回事：关闭会摘掉 is-open 并在过渡后补 hidden。
+     */
+    .ai-panel.is-open.is-peek {
+        transform: translateY(calc(100% - 64px));
+    }
+
     /* 抽屉打开时悬浮球让位 */
     .ai-root.is-mobile.is-open .ai-fab {
         display: none;

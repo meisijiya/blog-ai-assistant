@@ -1307,6 +1307,26 @@
         var view = hit && hit.dataset.state ? hit.dataset.state : null;
         var refs = AI.ui.refs;
 
+        /*
+         * 窄屏：点浮窗外面只是把它压下去，不是关闭——读者要一边看文章一边
+         * 让它留在手边。点浮窗本体（包括压下去后露出的头部那一条）恢复原样。
+         * 选中文字后的「问 AI」气泡与悬浮球不算外面：那两个动作就是要用它。
+         */
+        if (AI.ui.isNarrow() && AI.ui.isOpen()) {
+            var inPanel = target && target.closest ? target.closest('.ai-panel') : null;
+            var keepOpen = target && target.closest
+                ? target.closest('.ai-fab, .ai-selection-bubble')
+                : null;
+            if (!inPanel && !keepOpen) {
+                AI.ui.setPeek(true);
+                return;
+            }
+            if (inPanel && AI.ui.isPeek && AI.ui.isPeek()) {
+                AI.ui.setPeek(false);
+                // 不 return：这一次点击可能还落在面板里的某个按钮上
+            }
+        }
+
         // 下拉展开时，点别处先收起（按钮与选项本身除外）
         if (!refs.presetList.hidden &&
             !refs.presetList.contains(target) &&

@@ -1142,6 +1142,23 @@
 
     /* ------------------------------------------------------------ 状态切换 */
 
+    /*
+     * 窄屏「压下去」：点浮窗外面的区域时，把抽屉往下推、只留头部一条，
+     * 再点一下浮窗就回到原高度。它和关闭是两件事——不隐藏、不卸载，
+     * 高度也不变，只是 transform 位移，所以恢复时不用重新测量。
+     */
+    var peeked = false;
+
+    function setPeek(on) {
+        var next = !!on && isNarrow();
+        peeked = next;
+        if (refs.panel) refs.panel.classList.toggle('is-peek', next);
+    }
+
+    function isPeek() {
+        return peeked;
+    }
+
     function setOpen(open) {
         if (open) {
             if (closeTimer) {
@@ -1156,8 +1173,11 @@
                 if (!refs.panel.hidden) refs.panel.classList.add('is-open');
             });
             refs.fab.setAttribute('aria-expanded', 'true');
+            // 重新打开就是完整展开，不带着上一次的压下去状态
+            setPeek(false);
             return;
         }
+        setPeek(false);
         refs.panel.classList.remove('is-open');
         refs.root.classList.remove('is-open');
         refs.fab.setAttribute('aria-expanded', 'false');
@@ -1199,6 +1219,8 @@
     function syncViewport() {
         var narrow = isNarrow();
         refs.root.classList.toggle('is-mobile', narrow);
+        // 压下去只属于窄屏抽屉；跨到宽屏就恢复成普通浮窗
+        if (!narrow) setPeek(false);
         /*
          * 抽屉高度只对窄屏生效：宽屏要把内联 height 摘掉，
          * 否则窄屏拖出来的那一档高度会跟着浮窗一路带到宽屏去。
@@ -2253,6 +2275,8 @@
         setState: setState,
         syncViewport: syncViewport,
         isNarrow: isNarrow,
+        setPeek: setPeek,
+        isPeek: isPeek,
         isCompact: isCompact,
         setFabPosition: setFabPosition,
         getFabPosition: getFabPosition,
