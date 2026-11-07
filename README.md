@@ -55,7 +55,7 @@
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `ai-assistant-main.js` | 1771 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
+| `ai-assistant-main.js` | 1871 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
 | `ai-assistant-ui.js` | 2298 | 面板 DOM 与渲染（自写 Markdown 渲染，不引第三方库） |
 | `ai-assistant-provider.js` | 911 | Provider 适配：两种协议、SSE 解析、错误分型、密钥脱敏、usage 汇总 |
 | `ai-assistant-context.js` | 306 | 小节切分与当前阅读位置识别（读标题 id，不做数据副本） |

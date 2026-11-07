@@ -20,6 +20,13 @@
     var MAX_INJECTED_CHARS = 12000;
     var SECTION_CHARS = 1200;
     var HEADINGS_LIMIT = 80;
+    /*
+     * 历史预算：工具结果与思考块留在历史里只对「那一轮」有用，
+     * 但每轮都会把它们重新发给模型。超预算就整轮丢最早的对话。
+     */
+    var HISTORY_CHAR_BUDGET = 24000;
+    var TOOL_RESULT_STUB_CHARS = 120;
+    var FOLDED_MARK = '\n…（正文已折叠，需要细节请重新调用工具读取）';
 
     /*
      * 断点续传的引导语：只挂在中断后那一轮的 system 上。
@@ -176,6 +183,96 @@
             state.messages = providerHistory(id);
         }
         return id;
+    }
+
+    /* 一条消息近似占多少字符：用于历史预算，不做精确 token 估算 */
+    function messageChars(msg) {
+        var content = msg && msg.content;
+        if (typeof content === 'string') return content.length;
+        var total = 0;
+        if (Array.isArray(content)) {
+            for (var i = 0; i < content.length; i++) {
+                var part = content[i] || {};
+                if (part.type === 'text') total += String(part.text || '').length;
+                else if (part.type === 'thinking') total += String(part.thinking || '').length;
+                else if (part.type === 'tool_result') total += JSON.stringify(part.content || '').length;
+                else if (part.type === 'tool_use') total += JSON.stringify(part.input || {}).length;
+            }
+        }
+        return total;
+    }
+
+    function hasTextPart(msg) {
+        var content = msg && msg.content;
+        if (typeof content === 'string') return !!content;
+        if (!Array.isArray(content)) return false;
+        for (var i = 0; i < content.length; i++) {
+            if (content[i] && content[i].type === 'text') return true;
+        }
+        return false;
+    }
+
+    /*
+     * 历史压缩：只在每轮开始时做一次，绝不在流式过程中改——
+     * 同一轮里改历史会让前后两次请求的前缀不一致，缓存与协议配对都会乱。
+     *
+     *   1. 思考块只留最后一条 assistant 轮（Anthropic 续写要它），其余丢掉；
+     *   2. 旧轮次的工具结果折成首行的摘要，正文不留在提示词里；
+     *   3. 仍超预算就按整轮丢掉最早的对话。
+     *
+     * 系统提示的稳定前缀不受影响：它永远在第一段，压缩只动 messages。
+     */
+    function compactHistory() {
+        var msgs = state.messages;
+        if (!msgs.length) return;
+
+        var lastAssistant = -1;
+        for (var a = msgs.length - 1; a >= 0; a--) {
+            if (msgs[a] && msgs[a].role === 'assistant') {
+                lastAssistant = a;
+                break;
+            }
+        }
+
+        for (var i = 0; i < msgs.length; i++) {
+            var content = msgs[i] && msgs[i].content;
+            if (!Array.isArray(content)) continue;
+            var next = [];
+            for (var j = 0; j < content.length; j++) {
+                var part = content[j] || {};
+                if (part.type === 'thinking' && i !== lastAssistant) continue;
+                if (part.type === 'tool_result' && typeof part.content === 'string' &&
+                    part.content.length > TOOL_RESULT_STUB_CHARS &&
+                    part.content.indexOf(FOLDED_MARK) === -1) {
+                    // 折叠过的不能再折一次：截断 + 提示会一轮轮变长
+                    part.content = part.content.slice(0, TOOL_RESULT_STUB_CHARS) + FOLDED_MARK;
+                }
+                next.push(part);
+            }
+            msgs[i].content = next;
+        }
+
+        var total = 0;
+        for (var t = 0; t < msgs.length; t++) total += messageChars(msgs[t]);
+        while (total > HISTORY_CHAR_BUDGET) {
+            // 第二段「真正的提问」就是可以整轮丢掉的起点：前面那一轮连同它的
+            // 工具结果与回答一起走，协议配对不会被拆散
+            var cut = -1;
+            var seen = 0;
+            for (var k = 0; k < msgs.length; k++) {
+                if (msgs[k] && msgs[k].role === 'user' && hasTextPart(msgs[k])) {
+                    seen += 1;
+                    if (seen === 2) {
+                        cut = k;
+                        break;
+                    }
+                }
+            }
+            if (cut <= 0) break; // 只剩最后一轮，不能再丢
+            msgs.splice(0, cut);
+            total = 0;
+            for (var d = 0; d < msgs.length; d++) total += messageChars(msgs[d]);
+        }
     }
 
     function onSessionChange(info) {
@@ -600,6 +697,8 @@
         // 这一轮必须有会话：没有会话时后续「落历史」会顺手建会话，
         // 建会话那次回调会把 state.messages 换成存储里的新数组，半截回答就丢了
         ensureSession();
+        // 每轮开始压缩一次历史：工具正文与旧思考不再跟着请求走
+        compactHistory();
 
         var controller = new AbortController();
         state.controller = controller;
@@ -1733,6 +1832,7 @@
         systemLayers: buildSystemLayers,
         composeSystem: composeSystem,
         compactToolResult: compactToolResult,
+        compactHistory: compactHistory,
         strategyGuidance: strategyGuidance,
         finalNudge: finalNudge,
         // 回合自证：门禁要能驱动真实的主流程，逐轮观察发给 Provider 的 system/messages
