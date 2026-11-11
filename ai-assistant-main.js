@@ -726,6 +726,8 @@
         // 过程留档：思考文本与工具摘要随回答一起进会话存储，只供回看，不进请求
         var turnThink = '';
         var turnTools = [];
+        // 实时包上的链接清单：刷新后按它原样恢复，避免「刷新前是链接、刷新后变文字」
+        var turnLinks = [];
         // 这轮读到的内容留个底：收尾轮模型没写出正文时用它兜底
         var readNotes = [];
         // 过程分组：工具卡与思考块都挂进去，收尾时折叠并排到答案之后
@@ -767,7 +769,17 @@
                     renderQueued = false;
                     body.innerHTML = AI.ui.renderMarkdown(buffer);
                     // 模型只写文章标题不写地址：拿这一轮读到的来源把标题包成链接
-                    if (AI.ui.linkifySources) AI.ui.linkifySources(body, state.sources);
+                    if (AI.ui.linkifySources) {
+                        var applied = AI.ui.linkifySources(body, state.sources);
+                        for (var li = 0; li < applied.length; li++) {
+                            var one = applied[li];
+                            var dup = false;
+                            for (var lj = 0; lj < turnLinks.length; lj++) {
+                                if (turnLinks[lj].text === one.text && turnLinks[lj].url === one.url) { dup = true; break; }
+                            }
+                            if (!dup) turnLinks.push({ text: one.text, url: one.url });
+                        }
+                    }
                     // 重绘是整体覆盖气泡内容，用量行会被抹掉，得补回来
                     // （rAF 排队的重绘可能落在 finally 的 setUsage 之后）
                     if (usage.input != null || usage.output != null || usage.cache != null) {
@@ -1104,6 +1116,7 @@
                 persistTurn('assistant', finalText, {
                     think: turnThink,
                     tools: turnTools,
+                    links: turnLinks,
                     sources: state.sources
                 });
             } else if (turnThink || turnTools.length) {
@@ -1112,6 +1125,7 @@
                 persistTurn('assistant', '', {
                     think: turnThink,
                     tools: turnTools,
+                    links: turnLinks,
                     sources: state.sources
                 });
             }

@@ -266,7 +266,10 @@
                     sources: (m.process.sources || []).map(function (src) {
                         return { url: src.url, title: src.title, kind: src.kind };
                     }),
-                    toolTotal: m.process.toolTotal || 0
+                    toolTotal: m.process.toolTotal || 0,
+                    links: (m.process.links || []).map(function (l) {
+                        return { text: l.text, url: l.url };
+                    })
                 };
             }
             return out;
@@ -280,7 +283,8 @@
      */
     var PROCESS_TEXT_LIMIT = 4000;
     var PROCESS_TOOL_LIMIT = 12;
-    var PROCESS_SOURCE_LIMIT = 20;
+    var PROCESS_SOURCE_LIMIT = 50;
+    var PROCESS_LINK_LIMIT = 40;
 
     function clip(value, limit) {
         var text = typeof value === 'string' ? value : String(value == null ? '' : value);
@@ -311,6 +315,18 @@
         // 真实次数与留档条数可能不同（只留最近 12 次），摘要要写真实次数
         if (toolTotal) proc.toolTotal = toolTotal;
 
+        // 实时包上的链接清单：回看时原样恢复，保证刷新前后一致
+        var links = [];
+        if (Array.isArray(input.links)) {
+            input.links.slice(0, PROCESS_LINK_LIMIT).forEach(function (one) {
+                if (!one) return;
+                var text = clip(one.text, 120);
+                var url = clip(one.url, 300);
+                if (text && url) links.push({ text: text, url: url });
+            });
+        }
+        if (links.length) proc.links = links;
+
         var sources = [];
         if (Array.isArray(input.sources)) {
             // 引用过的来源排在前面再截断：候选满了 20 条时，
@@ -321,14 +337,15 @@
             orderedSources.slice(0, PROCESS_SOURCE_LIMIT).forEach(function (one) {
                 if (!one) return;
                 var url = clip(one.url, 300);
-                var title = clip(one.title, 120);
+                // 标题别截太短：截断后正文里的标题就匹配不上了，链接会消失
+                var title = clip(one.title, 200);
                 if (!url && !title) return;
                 sources.push({ url: url, title: title, kind: one.kind === 'quoted' ? 'quoted' : 'candidate' });
             });
         }
         if (sources.length) proc.sources = sources;
 
-        if (!proc.think && !proc.tools && !proc.sources) return null;
+        if (!proc.think && !proc.tools && !proc.sources && !proc.links) return null;
         return proc;
     }
 
@@ -617,9 +634,14 @@
                 msg.appendChild(body);
             }
             body.innerHTML = renderMarkdown(one.content || '');
-            // 回看时也要能点：标题用会话里存下来的来源去配地址
-            if (!isUser && one.process && one.process.sources) {
-                linkifySources(body, one.process.sources);
+            // 回看时也要能点：先按留档的链接清单原样恢复（与实时完全一致），
+            // 再用来源兜底（老会话没有清单时才走这条）
+            if (!isUser && one.process) {
+                if (one.process.links && one.process.links.length) {
+                    applyStoredLinks(body, one.process.links);
+                } else if (one.process.sources) {
+                    linkifySources(body, one.process.sources);
+                }
             }
             if (!isUser && one.process && one.process.sources && one.process.sources.length) {
                 // 历史来源同样按 5 条一组铺开，不一口气全展开
@@ -2375,25 +2397,45 @@
         return false;
     }
 
+    /*
+     * 把正文里的文章标题按来源包成链接。
+     * 返回实际包上的链接清单（文本 + 地址）：实时与回看要用同一份清单，
+     * 否则刷新后按来源重新匹配可能对不上（标题被截断、来源没进留档），
+     * 读者会看到「刷新前是链接、刷新后变回普通文字」。
+     */
     function linkifySources(container, items) {
-        if (!container || !items || !items.length) return 0;
+        var applied = [];
+        if (!container || !items || !items.length) return applied;
         var ordered = items.slice().sort(function (a, b) {
             return (a.kind === 'quoted' ? 0 : 1) - (b.kind === 'quoted' ? 0 : 1);
         });
-        var linked = 0;
         var MAX_LINKS = 8;
-        for (var i = 0; i < ordered.length && linked < MAX_LINKS; i++) {
+        for (var i = 0; i < ordered.length && applied.length < MAX_LINKS; i++) {
             var item = ordered[i];
             if (!item || !item.url) continue;
             var names = titleCandidates(item.title);
             for (var j = 0; j < names.length; j++) {
                 if (linkFirstOccurrence(container, names[j], item.url)) {
-                    linked += 1;
+                    applied.push({ text: names[j], url: item.url });
                     break;
                 }
             }
         }
-        return linked;
+        return applied;
+    }
+
+    /* 回看时按留档的链接清单原样恢复：实时包过什么，刷新后还是什么 */
+    function applyStoredLinks(container, links) {
+        var applied = [];
+        if (!container || !links || !links.length) return applied;
+        for (var i = 0; i < links.length; i++) {
+            var one = links[i];
+            if (!one || !one.text || !one.url) continue;
+            if (linkFirstOccurrence(container, one.text, one.url)) {
+                applied.push({ text: one.text, url: one.url });
+            }
+        }
+        return applied;
     }
 
     function setSources(items) {
@@ -2938,6 +2980,7 @@
         setSources: setSources,
         toolSummary: toolSummary,
         linkifySources: linkifySources,
+        applyStoredLinks: applyStoredLinks,
         setRewindHandler: function (fn) {
             rewindHandler = typeof fn === 'function' ? fn : null;
         },
