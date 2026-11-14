@@ -974,7 +974,7 @@
         var views = el('div', 'ai-tabs');
         views.setAttribute('role', 'tablist');
         views.setAttribute('aria-label', '助手视图');
-        [['chat', '对话'], ['settings', '设置']].forEach(function (item) {
+        [['chat', '对话'], ['settings', '设置'], ['timer', '计时']].forEach(function (item) {
             var seg = el('button', 'ai-seg', item[1]);
             seg.type = 'button';
             seg.setAttribute('role', 'tab');
@@ -1282,6 +1282,94 @@
         return foot;
     }
 
+    /* ------------------------------------------------------------ 计时视图 */
+
+    /*
+     * 计时视图自上而下：当前任务名 → 大号计时数字 → 开始/暂停/重置
+     * → 任务列表容器 → 空态一句。
+     * 任务清单本身在 #63 落地，本票只留容器与空态，不实现清单逻辑。
+     */
+    function buildTimerView() {
+        var view = el('section', 'ai-view ai-view-timer');
+        view.dataset.view = 'timer';
+        view.setAttribute('aria-label', '计时');
+        view.hidden = true;
+
+        var task = el('p', 'ai-timer-task', '未选择任务');
+        refs.timerTask = task;
+        view.appendChild(task);
+
+        var value = el('p', 'ai-timer-value', '00:00');
+        refs.timerValue = value;
+        view.appendChild(value);
+
+        var done = el('p', 'ai-timer-done', '时间到了。');
+        done.hidden = true;
+        refs.timerDone = done;
+        view.appendChild(done);
+
+        var controls = el('div', 'ai-timer-controls');
+        var start = el('button', 'ai-btn ai-btn-primary', '开始');
+        start.type = 'button';
+        start.dataset.act = 'timer-start';
+        var pause = el('button', 'ai-btn', '暂停');
+        pause.type = 'button';
+        pause.dataset.act = 'timer-pause';
+        var reset = el('button', 'ai-btn', '重置');
+        reset.type = 'button';
+        reset.dataset.act = 'timer-reset';
+        controls.appendChild(start);
+        controls.appendChild(pause);
+        controls.appendChild(reset);
+        refs.timerStart = start;
+        refs.timerPause = pause;
+        refs.timerReset = reset;
+        view.appendChild(controls);
+
+        var list = el('div', 'ai-timer-tasks');
+        list.setAttribute('role', 'group');
+        list.setAttribute('aria-label', '任务列表');
+        refs.timerList = list;
+        view.appendChild(list);
+
+        view.appendChild(el('p', 'ai-empty', '还没有任务。计时器先按「未选择任务」记着。'));
+        return view;
+    }
+
+    /*
+     * 计时显示只刷新数字，不改状态：真相在 55-timer.js 的时间戳对里。
+     * 计时视图开着才跑刷新定时器，离开就停，别让后台空转。
+     */
+    function renderTimer(data) {
+        if (!refs.timerValue) return;
+        var snap = data.state;
+        refs.timerValue.textContent = snap.mode === 'down' && data.remainingMs !== null
+            ? AI.timer.format(data.remainingMs)
+            : AI.timer.format(data.elapsedMs);
+        refs.timerTask.textContent = snap.taskId ? snap.taskId : '未选择任务';
+        refs.timerStart.disabled = !!data.running;
+        refs.timerStart.textContent = data.running ? '计时中' : '开始';
+        refs.timerPause.disabled = !data.running;
+        refs.timerDone.hidden = !data.done;
+    }
+
+    var timerUnsubscribe = null;
+
+    function syncTimerTicking(on) {
+        if (!AI.timer) return;
+        if (on) {
+            if (timerUnsubscribe) return;
+            timerUnsubscribe = AI.timer.subscribe(renderTimer);
+            AI.timer.startTicking(500);
+            return;
+        }
+        if (timerUnsubscribe) {
+            timerUnsubscribe();
+            timerUnsubscribe = null;
+        }
+        AI.timer.stopTicking();
+    }
+
     function buildPanel() {
         var panel = el('section', 'ai-panel');
         panel.id = 'ai-panel';
@@ -1332,6 +1420,10 @@
         settings.appendChild(settingsForm);
         views.appendChild(settings);
         refs.settingsView = settings;
+
+        var timer = buildTimerView();
+        views.appendChild(timer);
+        refs.timerView = timer;
 
         var scrollDown = el('button', 'ai-scroll-down');
         scrollDown.type = 'button';
@@ -1535,24 +1627,28 @@
     }
 
     function setState(state) {
-        var view = state === 'settings' ? 'settings' : 'chat';
+        var view = state === 'settings' ? 'settings' : (state === 'timer' ? 'timer' : 'chat');
         refs.root.dataset.view = view;
         refs.chatView.hidden = view !== 'chat';
         refs.settingsView.hidden = view !== 'settings';
-        refs.composerBox.hidden = view === 'settings';
+        if (refs.timerView) refs.timerView.hidden = view !== 'timer';
+        // 输入区与设置底栏都只在对话/设置视图里出现，计时视图整块收起
+        refs.composerBox.hidden = view !== 'chat';
         refs.settingsFoot.hidden = view !== 'settings';
         var segs = refs.panel.querySelectorAll('.ai-seg[data-state]');
         for (var i = 0; i < segs.length; i++) {
             segs[i].setAttribute('aria-selected', segs[i].dataset.state === view ? 'true' : 'false');
         }
-        // 设置视图有自己的一套高度，窄屏下别让聊天抽屉拖出来的高度盖住它
+        // 设置视图与计时视图各有自己的一套高度，窄屏下别让聊天抽屉拖出来的高度盖住它
         if (refs.panel) {
-            if (view === 'settings') {
+            if (view === 'settings' || view === 'timer') {
                 refs.panel.style.height = '';
             } else if (isNarrow() && drawerHeight) {
                 refs.panel.style.height = drawerHeight + 'px';
             }
         }
+        // 计时刷新只在计时视图开着时跑，别让后台空转
+        syncTimerTicking(view === 'timer');
         // 设置视图的面板更高，切换后重新落位，把它夹回视口内
         window.requestAnimationFrame(placePanel);
     }
