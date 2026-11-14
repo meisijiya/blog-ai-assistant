@@ -1406,14 +1406,14 @@
     color: var(--ai-ink);
 }
 
-.ai-settings > .ai-section:last-child,
-.ai-settings > .ai-section:last-child .ai-section-card,
-.ai-settings > .ai-section:last-child .ai-field {
+.ai-settings > .ai-section-prompt,
+.ai-settings > .ai-section-prompt .ai-section-card,
+.ai-settings > .ai-section-prompt .ai-field {
     flex: 1 0 auto;
     min-height: 0;
 }
 
-.ai-settings > .ai-section:last-child .ai-textarea {
+.ai-settings > .ai-section-prompt .ai-textarea {
     flex: 1 1 auto;
     height: 88px;
     min-height: 80px;

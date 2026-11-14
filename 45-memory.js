@@ -19,6 +19,9 @@
     var MAX_CHARS = 200;
     var SEGMENT_HEAD = '【读者画像】';
 
+    /* 撤销上一次改动只需要回退一版：每次写入前把当前画像存到这一格 */
+    var PREV_KEY = 'ai-assistant.memory-prev';
+
     /*
      * 敏感信息分类：宿主侧过滤，与提示词里的约束双保险。
      * 关键词为主、号码格式为辅：画像条目很短，关键词足够覆盖，
@@ -105,6 +108,60 @@
         }
     }
 
+    /* 写入前留底：撤销上一次改动就靠这一格，只留一版 */
+    function snapshot() {
+        var current = readMemory();
+        try {
+            window.localStorage.setItem(PREV_KEY, JSON.stringify(current));
+        } catch (e) {
+            /* 存不下就没有可撤销的一版，不影响本次写入 */
+        }
+    }
+
+    /* 撤销上一次改动：把留底写回去，留底清掉（只有一版可退） */
+    function undo() {
+        var raw = null;
+        try {
+            raw = window.localStorage.getItem(PREV_KEY);
+        } catch (e) {
+            return { ok: false, reason: 'unavailable' };
+        }
+        if (!raw) return { ok: false, reason: 'no-previous' };
+        var prev = null;
+        try {
+            prev = JSON.parse(raw);
+        } catch (e) {
+            prev = null;
+        }
+        if (!prev || !Array.isArray(prev.entries)) return { ok: false, reason: 'no-previous' };
+        var memory = {
+            entries: prev.entries.map(function (one) {
+                return {
+                    key: String(one.key || ''),
+                    value: String(one.value == null ? '' : one.value),
+                    source: one.source === 'me' ? 'me' : 'ai',
+                    updatedAt: Number(one.updatedAt) || 0
+                };
+            }).filter(function (one) { return one.key; }),
+            updatedAt: Number(prev.updatedAt) || 0
+        };
+        var ok = writeMemory(memory);
+        try {
+            window.localStorage.removeItem(PREV_KEY);
+        } catch (e) {
+            /* 清不掉留底就下次再说 */
+        }
+        return { ok: ok, changed: true, chars: charCount(memory.entries), memory: memory };
+    }
+
+    /* 全部忘掉 */
+    function clearAll() {
+        snapshot();
+        var memory = { entries: [], updatedAt: Date.now() };
+        writeMemory(memory);
+        return { ok: true, changed: true, chars: 0, memory: memory };
+    }
+
     function sensitiveHits(text) {
         var value = String(text == null ? '' : text);
         var hits = [];
@@ -188,7 +245,10 @@
 
         var changed = hashOf(next) !== hashOf(current.entries);
         var memory = { entries: next, updatedAt: Date.now() };
-        if (changed) writeMemory(memory);
+        if (changed) {
+            snapshot();
+            writeMemory(memory);
+        }
         return {
             ok: true,
             changed: changed,
@@ -208,6 +268,7 @@
             return { ok: false, reason: 'not-found', chars: charCount(current.entries), memory: current };
         }
         var memory = { entries: next, updatedAt: Date.now() };
+        snapshot();
         writeMemory(memory);
         return { ok: true, changed: true, chars: charCount(next), memory: memory };
     }
@@ -299,6 +360,8 @@
         sensitiveHits: sensitiveHits,
         apply: apply,
         remove: remove,
+        undo: undo,
+        clear: clearAll,
         segment: function () { return buildSegment(readMemory().entries); },
         decision: decision,
         markInjected: markInjected,

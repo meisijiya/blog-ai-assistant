@@ -1142,6 +1142,146 @@
         });
     }
 
+    /* 「她是谁」：只读，段里不出现任何输入控件 */
+    function buildIdentity() {
+        var card = sectionCard('她是谁');
+        card.section.classList.add('ai-section-identity');
+        var name = el('p', 'ai-identity-name', '一二');
+        card.card.appendChild(name);
+        var line = el('p', 'ai-identity-line', '可爱、粘人、善解人意，非常照顾你。');
+        card.card.appendChild(line);
+        var lock = el('p', 'ai-identity-lock', '身份层锁死：她是谁不提供任何修改入口，改系统提示词也不影响这一段。');
+        card.card.appendChild(lock);
+        var preview = el('p', 'ai-identity-memory', '她还没记住什么。');
+        card.card.appendChild(preview);
+        refs.identityMemory = preview;
+        return card.section;
+    }
+
+    /* 「读者画像」：键值行可增删改，字数计数 /200，超限标红且不许保存 */
+    function buildMemoryBlock() {
+        var card = sectionCard('读者画像');
+        card.section.classList.add('ai-section-memory');
+
+        var rows = el('div', 'ai-memory-rows');
+        refs.memoryRows = rows;
+        card.card.appendChild(rows);
+
+        var foot = el('div', 'ai-memory-foot');
+        var count = el('p', 'ai-memory-count', '0/200');
+        refs.memoryCount = count;
+        foot.appendChild(count);
+        var save = el('button', 'ai-btn ai-btn-primary', '保存');
+        save.type = 'button';
+        save.dataset.act = 'memory-save';
+        refs.memorySave = save;
+        foot.appendChild(save);
+        card.card.appendChild(foot);
+
+        var actions = el('div', 'ai-memory-actions');
+        var add = el('button', 'ai-btn', '添加一条');
+        add.type = 'button';
+        add.dataset.act = 'memory-add';
+        actions.appendChild(add);
+        var undo = el('button', 'ai-btn', '撤销上一次改动');
+        undo.type = 'button';
+        undo.dataset.act = 'memory-undo';
+        refs.memoryUndo = undo;
+        actions.appendChild(undo);
+        var clear = el('button', 'ai-btn', '全部忘掉');
+        clear.type = 'button';
+        clear.dataset.act = 'memory-clear';
+        actions.appendChild(clear);
+        card.card.appendChild(actions);
+
+        var note = el('p', 'ai-memory-note', '她只记你明说过的事；密码、密钥、证件、住址、联系方式与健康细节不记。');
+        card.card.appendChild(note);
+        return card.section;
+    }
+
+    /* 一条画像行：键、值、来源标记、删除 */
+    function memoryRow(entry) {
+        var one = entry || { key: '', value: '', source: 'me' };
+        var row = el('div', 'ai-memory-row');
+        row.dataset.source = one.source === 'ai' ? 'ai' : 'me';
+        row.dataset.key = one.key;
+
+        var key = el('input', 'ai-input-line ai-memory-key');
+        key.type = 'text';
+        key.value = one.key;
+        key.placeholder = '记什么';
+        key.dataset.memory = 'key';
+        row.appendChild(key);
+
+        var value = el('input', 'ai-input-line ai-memory-value');
+        value.type = 'text';
+        value.value = one.value;
+        value.placeholder = '内容';
+        value.dataset.memory = 'value';
+        row.appendChild(value);
+
+        var badge = el('span', 'ai-memory-badge', one.source === 'ai' ? 'AI 记的' : '我改的');
+        row.appendChild(badge);
+
+        var del = el('button', 'ai-btn ai-memory-del', '删除');
+        del.type = 'button';
+        del.dataset.act = 'memory-del';
+        row.appendChild(del);
+        return row;
+    }
+
+    /* 重画画像：来源标记、计数、超限标红与保存按钮的可用状态都在这里统一 */
+    function renderMemory() {
+        if (!refs.memoryRows) return;
+        var entries = AI.memory ? AI.memory.entries() : [];
+        refs.memoryRows.innerHTML = '';
+        for (var i = 0; i < entries.length; i++) {
+            refs.memoryRows.appendChild(memoryRow(entries[i]));
+        }
+        if (!entries.length) {
+            refs.memoryRows.appendChild(el('p', 'ai-memory-empty', '还没有记下任何事。'));
+        }
+        refreshMemoryCount();
+        if (refs.identityMemory) {
+            refs.identityMemory.textContent = entries.length
+                ? '她记得你：' + entries.map(function (one) { return one.key + ' = ' + one.value; }).join('；')
+                : '她还没记住什么。';
+        }
+    }
+
+    /* 字数按「键 + 值」算，与 45-memory.js 的 charCount 同口径 */
+    function memoryDraft() {
+        var rows = refs.memoryRows ? refs.memoryRows.querySelectorAll('.ai-memory-row') : [];
+        var entries = [];
+        for (var i = 0; i < rows.length; i++) {
+            var key = rows[i].querySelector('[data-memory="key"]');
+            var value = rows[i].querySelector('[data-memory="value"]');
+            var k = key ? key.value.trim() : '';
+            if (!k) continue;
+            entries.push({
+                key: k,
+                value: value ? value.value.trim() : '',
+                source: rows[i].dataset.source === 'ai' ? 'ai' : 'me'
+            });
+        }
+        return entries;
+    }
+
+    function refreshMemoryCount() {
+        if (!refs.memoryCount) return;
+        var entries = memoryDraft();
+        var limit = AI.memory ? AI.memory.limit : 200;
+        var chars = 0;
+        for (var i = 0; i < entries.length; i++) {
+            chars += entries[i].key.length + entries[i].value.length;
+        }
+        refs.memoryCount.textContent = chars + '/' + limit;
+        var over = chars > limit;
+        refs.memoryCount.classList.toggle('is-over', over);
+        if (refs.memorySave) refs.memorySave.disabled = over;
+        return over;
+    }
+
     function buildSettings() {
         var wrap = el('div', 'ai-settings');
 
@@ -1187,8 +1327,15 @@
 
         /* 提示词：预设 + 可以直接改写的正文 */
         var prompt = sectionCard('提示词');
+        prompt.section.classList.add('ai-section-prompt');
+        var promptNote = el('p', 'ai-prompt-note', '这一段只改语气与工作方式，不影响她是谁。');
+        prompt.card.appendChild(promptNote);
         prompt.card.appendChild(presetField());
         wrap.appendChild(prompt.section);
+
+        wrap.appendChild(buildMemoryBlock());
+        // 「她是谁」放最后：只读信息，不该占最上面的视线
+        wrap.appendChild(buildIdentity());
 
         return wrap;
     }
@@ -3140,6 +3287,9 @@
         },
         setError: setError,
         setSaved: setSaved,
+        renderMemory: renderMemory,
+        memoryDraft: memoryDraft,
+        refreshMemoryCount: refreshMemoryCount,
         setBusy: setBusy,
         showBubble: showBubble,
         hideBubble: hideBubble,
