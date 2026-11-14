@@ -106,11 +106,24 @@
         }
     }
 
+    /*
+     * 落盘。配额满时先砍已完成的条目再试一次——清单参与退让时先砍做完了的，
+     * 未完成的不能丢；还装不下就留在内存里继续用（画像不参与任何退让）。
+     */
     function writeStorage() {
         try {
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            return true;
         } catch (e) {
-            /* 配额满或隐私模式：清单继续留在内存里 */
+            var kept = items.filter(function (one) { return one.status !== 'done'; });
+            if (kept.length === items.length) return false;
+            try {
+                window.localStorage.setItem(STORAGE_KEY, JSON.stringify(kept));
+                return true;
+            } catch (e2) {
+                /* 隐私模式或还是装不下：清单继续留在内存里 */
+                return false;
+            }
         }
     }
 
