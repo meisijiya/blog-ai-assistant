@@ -1513,6 +1513,89 @@
     }
 
     /* 计时挂在具体条目上：开始时把条目标成计时中并把计时器切到它，停止时折回时长 */
+    /* ------------------------------------------------------------ 读者画像 */
+
+    /* 保存画像：编辑区是整体替换——先删掉草稿里没有的键，再把草稿写成访客手改 */
+    function saveMemoryDraft() {
+        if (!AI.memory) return;
+        var draft = AI.ui.memoryDraft();
+        var limit = AI.memory.limit;
+        var chars = 0;
+        for (var i = 0; i < draft.length; i++) chars += draft[i].key.length + draft[i].value.length;
+        if (chars > limit) {
+            AI.ui.setSaved(false, '画像超出 ' + limit + ' 字，没有保存');
+            AI.ui.refreshMemoryCount();
+            return;
+        }
+        var current = AI.memory.entries();
+        for (var j = 0; j < current.length; j++) {
+            var keep = false;
+            for (var k = 0; k < draft.length; k++) {
+                if (draft[k].key === current[j].key) { keep = true; break; }
+            }
+            if (!keep) AI.memory.remove(current[j].key);
+        }
+        var result = draft.length ? AI.memory.apply(draft, { source: 'me' }) : { ok: true, changed: true };
+        if (result && result.ok === false) {
+            AI.ui.setSaved(false, result.reason === 'sensitive'
+                ? '含敏感信息，没有保存'
+                : '画像没有保存');
+        } else {
+            AI.ui.setSaved(true);
+        }
+        AI.ui.renderMemory();
+    }
+
+    /* 新增一行空画像：只加 DOM，等访客填完点保存才落盘 */
+    function addMemoryRow() {
+        var rows = AI.ui.refs.memoryRows;
+        if (!rows) return;
+        var empty = rows.querySelector('.ai-memory-empty');
+        if (empty) empty.parentNode.removeChild(empty);
+        var row = document.createElement('div');
+        row.className = 'ai-memory-row';
+        row.dataset.source = 'me';
+        var key = document.createElement('input');
+        key.className = 'ai-input-line ai-memory-key';
+        key.type = 'text';
+        key.placeholder = '记什么';
+        key.dataset.memory = 'key';
+        var value = document.createElement('input');
+        value.className = 'ai-input-line ai-memory-value';
+        value.type = 'text';
+        value.placeholder = '内容';
+        value.dataset.memory = 'value';
+        var badge = document.createElement('span');
+        badge.className = 'ai-memory-badge';
+        badge.textContent = '我改的';
+        var del = document.createElement('button');
+        del.className = 'ai-btn ai-memory-del';
+        del.type = 'button';
+        del.dataset.act = 'memory-del';
+        del.textContent = '删除';
+        row.appendChild(key);
+        row.appendChild(value);
+        row.appendChild(badge);
+        row.appendChild(del);
+        rows.appendChild(row);
+        AI.ui.refreshMemoryCount();
+        if (key.focus) key.focus();
+    }
+
+    function undoMemory() {
+        if (!AI.memory) return;
+        var result = AI.memory.undo();
+        AI.ui.setSaved(!!result.ok, result.ok ? '已撤销上一次改动' : '没有可撤销的改动');
+        AI.ui.renderMemory();
+    }
+
+    function forgetMemory() {
+        if (!AI.memory) return;
+        AI.memory.clear();
+        AI.ui.setSaved(true, '已全部忘掉');
+        AI.ui.renderMemory();
+    }
+
     function startTaskTiming(id) {
         if (!AI.tasks || !id) return;
         var item = AI.tasks.beginTiming(id);
@@ -1673,6 +1756,28 @@
             if (pausedId && AI.tasks && AI.tasks.get(pausedId)) AI.tasks.endTiming(pausedId);
             return;
         }
+        if (action === 'memory-add') {
+            addMemoryRow();
+            return;
+        }
+        if (action === 'memory-del') {
+            var memRow = hit.closest ? hit.closest('.ai-memory-row') : null;
+            if (memRow && memRow.parentNode) memRow.parentNode.removeChild(memRow);
+            AI.ui.refreshMemoryCount();
+            return;
+        }
+        if (action === 'memory-save') {
+            saveMemoryDraft();
+            return;
+        }
+        if (action === 'memory-undo') {
+            undoMemory();
+            return;
+        }
+        if (action === 'memory-clear') {
+            forgetMemory();
+            return;
+        }
         if (action === 'task-add') {
             addTaskFromPanel();
             return;
@@ -1720,6 +1825,11 @@
             AI.ui.refs.sendBtn.disabled = !target.value.trim();
             // 输入框随行数长高，最多三行（上限在样式里），超出的部分内部滚动
             safeUi(AI.ui.growComposer);
+            return;
+        }
+        // 画像编辑行改动时实时刷新计数与超限状态
+        if (target.dataset && target.dataset.memory) {
+            AI.ui.refreshMemoryCount();
             return;
         }
         var field = target.dataset ? target.dataset.field : null;
@@ -2010,6 +2120,8 @@
         registerRewind();
 
         fillSettings();
+        // 画像编辑区按存储重画一次：来源标记、计数与超限状态都在 renderMemory 里
+        AI.ui.renderMemory();
         AI.ui.setOpen(false);
         AI.ui.setState(hasUsableConfig() ? 'chat' : 'settings');
         refreshContextBar();
