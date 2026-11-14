@@ -2,7 +2,7 @@
  * 助手界面的 DOM 与渲染
  *
  * 这一层只管「长什么样、怎么显示」，不碰网络与状态机；
- * 状态与流程在 ai-assistant-main.js。
+ * 状态与流程在 60-main.js。
  * 结构与类名对齐 Open Design 原型（ai-widget.html），样式在 ai-assistant.css。
  */
 (function () {

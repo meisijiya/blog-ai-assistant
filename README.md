@@ -57,18 +57,21 @@
 
 全部是 classic script（IIFE 包裹，挂 `window.AIAssistant`），零 npm 依赖，不引外部 CDN。
 
+文件名以数字前缀排序（`NN-xxx`），前缀决定加载顺序，不看字母序。新增助手文件只要按这个约定命名，
+主站的注入脚本与测试会按目录发现它，不需要改任何清单。
+
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `ai-assistant-main.js` | 1896 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
-| `ai-assistant-ui.js` | 2397 | 面板 DOM 与渲染（自写 Markdown 渲染，不引第三方库） |
-| `ai-assistant-provider.js` | 913 | Provider 适配：两种协议、SSE 解析、错误分型、密钥脱敏、usage 汇总 |
-| `ai-assistant-context.js` | 306 | 小节切分与当前阅读位置识别（读标题 id，不做数据副本） |
-| `ai-assistant-tools.js` | 448 | 三个工具：`list_articles` / `search_articles` / `read_section` |
-| `ai-assistant-search.js` | 353 | 分层检索（本地 BM25 → 模型改写 → 模型重排）与跨文章分片读取 |
-| `ai-assistant.css` | 1919 | 界面样式 |
-| `ai-assistant-tokens.css` | 101 | 设计令牌（跟随 `body.dark-theme` 翻面） |
+| `60-main.js` | 2027 | 主流程：配置、预设、上下文装配、工具轮次、会话与 provider 历史接线 |
+| `50-ui.js` | 3065 | 面板 DOM 与渲染（自写 Markdown 渲染，不引第三方库） |
+| `10-provider.js` | 913 | Provider 适配：两种协议、SSE 解析、错误分型、密钥脱敏、usage 汇总 |
+| `20-context.js` | 306 | 小节切分与当前阅读位置识别（读标题 id，不做数据副本） |
+| `40-tools.js` | 466 | 三个工具：`list_articles` / `search_articles` / `read_section` |
+| `30-search.js` | 391 | 分层检索（本地 BM25 → 模型改写 → 模型重排）与跨文章分片读取 |
+| `20-main.css` | 2086 | 界面样式 |
+| `10-tokens.css` | 102 | 设计令牌（跟随 `body.dark-theme` 翻面） |
 
-样式令牌只写在 `ai-assistant-tokens.css` 一处，`ai-assistant.css` 只消费变量。
+样式令牌只写在 `10-tokens.css` 一处，`20-main.css` 只消费变量。
 
 ## 接入主站
 
