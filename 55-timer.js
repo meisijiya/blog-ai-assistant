@@ -127,6 +127,9 @@
         }
         if (options.mode !== undefined) {
             state.mode = options.mode === 'down' && state.targetMs !== null ? 'down' : 'up';
+        } else if (state.targetMs !== null) {
+            // 没显式给模式但给了目标时长：按带预估时长的任务倒计时
+            state.mode = 'down';
         }
         // 没有目标时长就只能是正计时：模式与目标时长必须一致
         if (state.targetMs === null) state.mode = 'up';
@@ -136,7 +139,6 @@
         emit();
         return view();
     }
-
     function pause() {
         if (state.startedAt !== null) {
             state.accumulatedMs = elapsedOf(state, Date.now());

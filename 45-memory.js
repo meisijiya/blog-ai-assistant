@@ -17,7 +17,10 @@
 
     var STORAGE_KEY = 'ai-assistant.memory';
     var MAX_CHARS = 200;
-    var SEGMENT_HEAD = '【读者画像】';
+    /* 画像段标识：整段用 <memory> 包起来，标签下第一行写权威说明 */
+    var SEGMENT_HEAD = '<memory>';
+    var SEGMENT_NOTE = '读者画像，可能过时；读者说错了以读者为准';
+    var SEGMENT_END = '</memory>';
 
     /* 撤销上一次改动只需要回退一版：每次写入前把当前画像存到这一格 */
     var PREV_KEY = 'ai-assistant.memory-prev';
@@ -273,15 +276,64 @@
         return { ok: true, changed: true, chars: charCount(next), memory: memory };
     }
 
+    /*
+     * 事务式保存整份画像草稿（设置页整体替换）：
+     * 改动任何东西之前先拍一次快照，之后写入不再覆盖它，撤销才能回到改动前那版；
+     * 逐条对比：只有键或值真的变了的条目才标成访客手改，没动过的保留原来源。
+     */
+    function applyDraft(entries) {
+        snapshot();
+        var list = Array.isArray(entries) ? entries : [];
+        var current = readMemory().entries;
+        var byKey = {};
+        for (var i = 0; i < current.length; i++) byKey[current[i].key] = current[i];
+        var next = [];
+        var changed = [];
+        var removed = [];
+        var seen = {};
+        for (var j = 0; j < list.length; j++) {
+            var one = list[j] || {};
+            var key = normalizeText(one.key);
+            if (!key) continue;
+            seen[key] = true;
+            var before = byKey[key];
+            var value = String(one.value == null ? '' : one.value).trim();
+            // 只有键或值真的变了的才算访客手改；没动过的保留原来源，
+            // 新加的行算访客写的
+            var touched = !before || normalizeText(before.value) !== value;
+            next.push({
+                key: key,
+                value: value,
+                source: touched ? 'me' : before.source,
+                updatedAt: Date.now()
+            });
+            if (touched) changed.push(key);
+        }
+        for (var k = 0; k < current.length; k++) {
+            if (!seen[current[k].key]) removed.push(current[k].key);
+        }
+        var memory = { entries: next, updatedAt: Date.now() };
+        writeMemory(memory);
+        return {
+            ok: true,
+            changed: changed.length > 0 || removed.length > 0,
+            changedKeys: changed,
+            removed: removed,
+            chars: charCount(next),
+            memory: memory
+        };
+    }
+
     /* ------------------------------------------------------------ 注入 */
 
     function buildSegment(entries) {
         if (!entries.length) return '';
-        var lines = [];
+        var lines = [SEGMENT_HEAD, SEGMENT_NOTE];
         for (var i = 0; i < entries.length; i++) {
             lines.push('- ' + entries[i].key + ': ' + entries[i].value);
         }
-        return SEGMENT_HEAD + '\n' + lines.join('\n') + '\n\n';
+        lines.push(SEGMENT_END);
+        return lines.join('\n') + '\n\n';
     }
 
     function sessionState(sessionId) {
@@ -342,25 +394,53 @@
         if (blank === -1) return '';
         return value.slice(blank + 2);
     }
+    /*
+     * 跨标签页：别的页改了画像，本页重读并通知 UI 重画（不重触发注入判定，
+     * 注入只看本轮发送时的历史与哈希）。
+     */
+    var changeListeners = [];
+    if (window.addEventListener) {
+        window.addEventListener('storage', function (event) {
+            if (event.key !== STORAGE_KEY && event.key !== null) return;
+            sessions = {};
+            for (var i = 0; i < changeListeners.length; i++) {
+                try {
+                    changeListeners[i](readMemory());
+                } catch (e) {
+                    /* 单个监听者画错不该拖垮画像 */
+                }
+            }
+        });
+    }
 
-    AI.memory = {
-        limit: MAX_CHARS,
-        segmentHead: SEGMENT_HEAD,
-        get: readMemory,
-        entries: function () { return readMemory().entries; },
-        chars: function () { return charCount(readMemory().entries); },
-        /* 草稿用完再落盘：设置页与主流程都按同一个口径算字数 */
-        countOf: charCount,
-        hash: function () { return hashOf(readMemory().entries); },
-        sensitiveHits: sensitiveHits,
-        apply: apply,
-        remove: remove,
-        undo: undo,
-        clear: clearAll,
-        segment: function () { return buildSegment(readMemory().entries); },
-        decision: decision,
-        markInjected: markInjected,
-        historyHasSegment: historyHasSegment,
-        strip: strip
+     AI.memory = {
+         limit: MAX_CHARS,
+         segmentHead: SEGMENT_HEAD,
+         segmentNote: SEGMENT_NOTE,
+         get: readMemory,
+         entries: function () { return readMemory().entries; },
+         chars: function () { return charCount(readMemory().entries); },
+         /* 草稿用完再落盘：设置页与主流程都按同一个口径算字数 */
+         countOf: charCount,
+         hash: function () { return hashOf(readMemory().entries); },
+         sensitiveHits: sensitiveHits,
+         apply: apply,
+         applyDraft: applyDraft,
+         remove: remove,
+         undo: undo,
+         clear: clearAll,
+         segment: function () { return buildSegment(readMemory().entries); },
+         decision: decision,
+         markInjected: markInjected,
+         historyHasSegment: historyHasSegment,
+         strip: strip,
+         subscribe: function (fn) {
+             if (typeof fn !== 'function') return function () {};
+             changeListeners.push(fn);
+             return function () {
+                 var at = changeListeners.indexOf(fn);
+                 if (at !== -1) changeListeners.splice(at, 1);
+             };
+         }
     };
 })();

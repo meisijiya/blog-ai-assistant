@@ -1612,7 +1612,8 @@
         refs.timerValue.textContent = snap.mode === 'down' && data.remainingMs !== null
             ? AI.timer.format(data.remainingMs)
             : AI.timer.format(data.elapsedMs);
-        refs.timerTask.textContent = snap.taskId ? snap.taskId : '未选择任务';
+        var task = snap.taskId && AI.tasks && AI.tasks.get(snap.taskId) ? AI.tasks.get(snap.taskId) : null;
+        refs.timerTask.textContent = task ? task.title : '未选择任务';
         refs.timerStart.disabled = !!data.running;
         refs.timerStart.textContent = data.running ? '计时中' : '开始';
         refs.timerPause.disabled = !data.running;

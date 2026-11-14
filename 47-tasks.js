@@ -235,11 +235,19 @@
     }
 
     /*
-     * 添加一条。kind 缺省按「待办」处理，source 缺省按「我写的」处理：
-     * 模型加进来的阅读任务会显式给 kind='task' 与 source='ai'。
+     * 添加一条。kind 缺省按「待办」处理，source 缺省按「我写的」处理；
+     * AI 加的条目默认落「待确认」，访客点头才转成待办。
      */
     function add(raw) {
         var input = raw || {};
+        /*
+         * AI 加的条目默认落「待确认」：模型只给建议，访客点头（点建议卡的
+         * 「全部加入」、或工具调用时显式给状态）才转成待办；访客自己写的默认待办。
+         */
+        var source = input.source === 'ai' ? 'ai' : 'me';
+        var status = ['pending', 'todo', 'running', 'done'].indexOf(input.status) >= 0
+            ? input.status
+            : (source === 'ai' ? 'pending' : 'todo');
         var item = normalize({
             kind: input.kind === 'task' ? 'task' : 'todo',
             title: input.title,
@@ -247,8 +255,8 @@
             categories: input.categories,
             durationMs: input.durationMs,
             accumulatedMs: input.accumulatedMs,
-            status: input.status,
-            source: input.source,
+            status: status,
+            source: source,
             createdAt: input.createdAt === undefined ? now() : input.createdAt
         });
         if (!item) return null;
@@ -350,6 +358,23 @@
         return base + (delta > 0 ? delta : 0);
     }
 
+    /*
+     * 刷新或跨标签页后内存里的计时起点就丢了：按全局计时器的 taskId + startedAt
+     * 重建「哪条在计时、何时开始的」，不新增存储字段。
+     */
+    function reconcileRunning() {
+        runningSince = {};
+        runningId = null;
+        if (!AI.timer || typeof AI.timer.getState !== 'function') return;
+        var snap = AI.timer.getState();
+        if (!snap || !snap.startedAt || !snap.taskId) return;
+        var item = get(snap.taskId);
+        if (!item || item.status === 'done') return;
+        runningId = snap.taskId;
+        runningSince[snap.taskId] = snap.startedAt;
+        if (item.status !== 'running') item.status = 'running';
+    }
+
     /* ------------------------------------------------------------ 删除 */
 
     /*
@@ -394,6 +419,8 @@
     }
 
     items = readStorage();
+    // 55-timer.js 在本文件之后加载，计时状态那时才就绪，恢复后再重建计时起点
+    setTimeout(reconcileRunning, 0);
 
     AI.tasks = {
         STORAGE_KEY: STORAGE_KEY,

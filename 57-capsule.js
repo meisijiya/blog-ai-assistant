@@ -195,14 +195,17 @@
     function sync() {
         render();
         /*
-         * 胶囊藏起来（没开始、已归零）就停掉轮询：
+         * 胶囊可见就保证轮询在跑、隐藏就停：
+         * 挂载时计时往往还没开始（胶囊隐藏），那时起的轮询会被下面藏掉；
+         * 计时开始后要靠这一句把轮询重新拉起来，否则胶囊文字冻结在开始那一刻。
          * 常驻的 setInterval 会把 jsdom 里的事件循环钉住，门禁脚本跑完不退出；
-         * 真浏览器里也是白烧 250ms 一次的读矩形。
+         * 真浏览器里隐藏时停掉也是省掉每 250ms 一次的读矩形。
          */
         if (!capsule || capsule.hidden) {
             stopTicking();
             return;
         }
+        if (tickTimer === null) startTicking();
         layout();
     }
 

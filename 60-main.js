@@ -1514,7 +1514,7 @@
 
     /* ------------------------------------------------------------ 读者画像 */
 
-    /* 保存画像：编辑区是整体替换——先删掉草稿里没有的键，再把草稿写成访客手改 */
+    /* 保存画像：编辑区是整体替换——一次性事务写入，快照与来源标记都在内存里定 */
     function saveMemoryDraft() {
         if (!AI.memory) return;
         var draft = AI.ui.memoryDraft();
@@ -1525,19 +1525,19 @@
             AI.ui.refreshMemoryCount();
             return;
         }
-        var current = AI.memory.entries();
-        for (var j = 0; j < current.length; j++) {
-            var keep = false;
-            for (var k = 0; k < draft.length; k++) {
-                if (draft[k].key === current[j].key) { keep = true; break; }
-            }
-            if (!keep) AI.memory.remove(current[j].key);
+        var sensitive = [];
+        for (var i = 0; i < draft.length; i++) {
+            var hits = AI.memory.sensitiveHits(draft[i].key + ' ' + (draft[i].value || ''));
+            if (hits.length) sensitive.push(draft[i].key);
         }
-        var result = draft.length ? AI.memory.apply(draft, { source: 'me' }) : { ok: true, changed: true };
+        if (sensitive.length) {
+            AI.ui.setSaved(false, '含敏感信息，没有保存：' + sensitive.join('、'));
+            AI.ui.refreshMemoryCount();
+            return;
+        }
+        var result = AI.memory.applyDraft(draft);
         if (result && result.ok === false) {
-            AI.ui.setSaved(false, result.reason === 'sensitive'
-                ? '含敏感信息，没有保存'
-                : '画像没有保存');
+            AI.ui.setSaved(false, '画像没有保存');
         } else {
             AI.ui.setSaved(true);
         }
@@ -1715,6 +1715,13 @@
         }
         if (action === 'timer-start') {
             AI.timer.start({ taskId: AI.timer.getState().taskId, targetMs: AI.timer.getState().targetMs });
+            return;
+        }
+        if (action === 'timer-reset') {
+            AI.timer.reset();
+            // 计时器归零，挂在条目上的「计时中」也一起折回时长并退到待办
+            var resetId = AI.timer.getState().taskId;
+            if (resetId && AI.tasks && AI.tasks.get(resetId)) AI.tasks.endTiming(resetId);
             return;
         }
         if (action === 'timer-pause') {
@@ -2092,6 +2099,13 @@
         fillSettings();
         // 画像编辑区按存储重画一次：来源标记、计数与超限状态都在 renderMemory 里
         AI.ui.renderMemory();
+        /* 别的标签页改了画像时重画编辑区，别让本页停留在旧内容上 */
+        if (AI.memory && AI.memory.subscribe) {
+            AI.memory.subscribe(function () {
+                safeUi(AI.ui.renderMemory);
+                safeUi(AI.ui.refreshMemoryCount);
+            });
+        }
         AI.ui.setOpen(false);
         AI.ui.setState(hasUsableConfig() ? 'chat' : 'settings');
         refreshContextBar();

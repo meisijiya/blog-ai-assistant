@@ -103,7 +103,9 @@
                     categories: it.categories || [],
                     durationMs: it.durationMs,
                     kind: 'task',
-                    source: 'ai'
+                    source: 'ai',
+                    // 访客点头加入：直接落成待办，不走默认的待确认
+                    status: 'todo'
                 };
             });
             if (AI.tasks && typeof AI.tasks.addMany === 'function') {

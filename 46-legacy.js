@@ -50,8 +50,8 @@
         }
 
         var importItems = [];
-        var tasksOk = !tasksRaw;
-        var todosOk = !todosRaw;
+        var tasksParsed = false;
+        var todosParsed = false;
 
         if (tasksRaw) {
             try {
@@ -73,8 +73,7 @@
                             createdAt: createdAt
                         });
                     }
-                    ls.removeItem('tasks');
-                    tasksOk = true;
+                    tasksParsed = true;
                 }
             } catch (e) {
                 /* 坏 JSON：保留旧键不动 */
@@ -97,19 +96,34 @@
                             createdAt: cAt
                         });
                     }
-                    ls.removeItem('todos');
-                    todosOk = true;
+                    todosParsed = true;
                 }
             } catch (e) {
                 /* 坏 JSON：保留旧键不动 */
             }
         }
 
+        /*
+         * 先写新表、成功后再删旧键：写失败就保留旧键、不置标记，
+         * 下次加载还能再迁一次，不会把读者的数据弄丢。
+         */
+        var imported = true;
         if (importItems.length) {
-            try { AI.tasks.importMany(importItems); } catch (e) {}
+            try {
+                AI.tasks.importMany(importItems);
+            } catch (e) {
+                imported = false;
+            }
         }
 
-        if (tasksOk && todosOk) {
+        if (!(tasksParsed && todosParsed && imported)) return;
+        if (tasksRaw) {
+            try { ls.removeItem('tasks'); } catch (e) { imported = false; }
+        }
+        if (todosRaw) {
+            try { ls.removeItem('todos'); } catch (e) { imported = false; }
+        }
+        if (imported) {
             try { ls.setItem(MARKER, '1'); } catch (e) {}
         }
     }
