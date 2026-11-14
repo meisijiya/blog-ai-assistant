@@ -2116,6 +2116,8 @@
         loadConfig();
         state.useContext = loadContextPref();
         AI.ui.mount();
+        /* 计时胶囊要挂在 .ai-root 上，必须在面板之后建 */
+        if (AI.capsule) AI.capsule.mount();
         AI.context.init();
         registerRewind();
 
