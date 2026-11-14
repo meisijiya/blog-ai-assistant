@@ -1412,6 +1412,20 @@
             row.appendChild(body);
 
             var acts = el('div', 'ai-task-acts');
+            if (item.status === 'todo' || item.status === 'pending') {
+                var startBtn = el('button', 'ai-task-act', '计时');
+                startBtn.type = 'button';
+                startBtn.dataset.act = 'task-start';
+                startBtn.dataset.id = item.id;
+                acts.appendChild(startBtn);
+            }
+            if (item.status === 'running') {
+                var stopBtn = el('button', 'ai-task-act', '停止计时');
+                stopBtn.type = 'button';
+                stopBtn.dataset.act = 'task-stop';
+                stopBtn.dataset.id = item.id;
+                acts.appendChild(stopBtn);
+            }
             if (item.status === 'done') {
                 var undo = el('button', 'ai-task-act', '撤销');
                 undo.type = 'button';

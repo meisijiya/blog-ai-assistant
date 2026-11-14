@@ -252,18 +252,19 @@
         return item;
     }
 
-    /* 标记完成 / 撤销完成：done 可回到 todo */
+    /* 标记完成 / 撤销完成：done 可回到 todo；标完成时若正在计时先把时长折进条目 */
     function complete(id, done) {
         var item = get(id);
         if (!item) return null;
-        var want = done ? 'done' : 'todo';
-        if (item.status === want) return item;
+        if (done && runningId === id) endTiming(id);
+        /* 撤销只对已完成有意义：没完成的条目传 false 是空操作，不推进状态 */
+        if (!done && item.status !== 'done') return item;
         if (item.status === 'done' && !done) {
             item.status = 'todo';
             commit();
             return item;
         }
-        return setStatus(id, want);
+        return setStatus(id, 'done');
     }
 
     /* ------------------------------------------------------------ 计时 */

@@ -1512,6 +1512,20 @@
         AI.tasks.remove(id);
     }
 
+    /* 计时挂在具体条目上：开始时把条目标成计时中并把计时器切到它，停止时折回时长 */
+    function startTaskTiming(id) {
+        if (!AI.tasks || !id) return;
+        var item = AI.tasks.beginTiming(id);
+        if (!item) return;
+        AI.timer.start({ taskId: item.id, targetMs: item.durationMs || null });
+    }
+
+    function stopTaskTiming(id) {
+        if (!AI.tasks || !id) return;
+        AI.timer.pause();
+        AI.tasks.endTiming(id);
+    }
+
     /*
      * 事件委托：动作属性挂在祖先上，按钮里的 SVG 图标、图标里的 path 才是 target，
      * 直接读 target.dataset 什么都取不到（点发送、点关闭都没反应，得点很多次）。
@@ -1654,10 +1668,9 @@
         }
         if (action === 'timer-pause') {
             AI.timer.pause();
-            return;
-        }
-        if (action === 'timer-reset') {
-            AI.timer.reset();
+            // 计时器停了，挂在具体条目上的「计时中」也一起折回时长
+            var pausedId = AI.timer.getState().taskId;
+            if (pausedId && AI.tasks && AI.tasks.get(pausedId)) AI.tasks.endTiming(pausedId);
             return;
         }
         if (action === 'task-add') {
@@ -1674,6 +1687,14 @@
         }
         if (action === 'task-delete') {
             deleteTask(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-start') {
+            startTaskTiming(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-stop') {
+            stopTaskTiming(hit.dataset.id);
             return;
         }
         if (action === 'resume') {
