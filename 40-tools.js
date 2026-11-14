@@ -189,6 +189,28 @@
         return Promise.resolve(payload);
     }
 
+    function suggestReading(args) {
+        return (AI.suggest && AI.suggest.load ? AI.suggest.load() : Promise.reject(new Error('suggest 模块未加载')))
+            .then(function (data) {
+                var raw = (data && Array.isArray(data.items)) ? data.items : [];
+                var items = raw.slice(0, MAX_LIST_ITEMS).map(function (it) {
+                    return {
+                        title: it.title,
+                        url: it.url,
+                        categories: Array.isArray(it.categories) ? it.categories : [],
+                        durationMs: (AI.suggest && AI.suggest.estimate) ? AI.suggest.estimate(it) : 300000
+                    };
+                });
+                if (AI.suggest && typeof AI.suggest.showCard === 'function') {
+                    try { AI.suggest.showCard(items); } catch (e) { /* UI 未挂载时忽略 */ }
+                }
+                return { items: items };
+            })
+            .catch(function (err) {
+                return { items: [], error: String(err && err.message ? err.message : err), suggestion: '先跑 hexo generate 生成阅读清单，再重试。' };
+            });
+    }
+
     function completeTask(args) {
         var id = ((args && args.id) || '').trim();
         if (!id) {
@@ -557,6 +579,15 @@
             }
         },
         {
+            name: 'suggest_reading',
+            description: '只读：从构建期阅读清单取一份阅读建议候选，返回 {items:[{title,url,categories,durationMs}]}。只给建议、不落盘：未得到访客明确要求时不得调用 add_tasks——先把建议摆给访客看，等访客说「都加上」「加吧」再落盘；访客说「跳过」就丢弃。清单类工具，0 次模型往返。',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: []
+            }
+        },
+        {
             name: 'update_memory',
             description: '把读者明说过的事实写进「读者画像」（她对你的记忆）：你是在替读者记她自己说过的话，比如「我喜欢短答」「我在准备软件测试实习面试」「我关心 Redis 缓存」。用法：entries 是一组键值对，key 用短名词（偏好 / 正在准备 / 关心……），value 写读者原话里的事实；text 可选，是一段说明性文字，整体作为一条记录写入。只写读者明确说过的内容：推断出来的要以「推断：」开头写清，读者可能不会认。禁止写入密码、密钥、身份证号、住址、电话、邮箱、第三方（他人）的私密数据、健康与医疗细节——这类内容会被直接拒写，不要尝试。也不要写「称呼」（叫读者笨蛋是固定行为，不进画像）。返回 {memory, changed, chars}：memory 是当前全部画像条目，changed 表示这次写入有没有改变内容（哈希一致就是没变），chars 是当前总字数（上限 200，超限会整体拒绝、不会截断，需要你自己压缩后重写）。读者手改过的条目带保护标记，写入会被跳过并在返回的 skipped 里列出，不要重复尝试覆盖。不要用它记录临时任务或检索结果——那属于清单与检索工具。',
             parameters: {
@@ -679,6 +710,7 @@
                 else if (name === 'list_tasks') promise = listTasks(args);
                 else if (name === 'add_tasks') promise = addTasks(args);
                 else if (name === 'complete_task') promise = completeTask(args);
+                else if (name === 'suggest_reading') promise = suggestReading(args);
                 else if (name === 'update_memory') promise = updateMemory(args);
                 else return Promise.resolve(failureResult(new Error('未知工具：' + name), name));
             } catch (err) {
