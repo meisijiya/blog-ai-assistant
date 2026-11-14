@@ -197,6 +197,34 @@
      * 添加一条。kind 缺省按「待办」处理，source 缺省按「我写的」处理：
      * 模型加进来的阅读任务会显式给 kind='task' 与 source='ai'。
      */
+    /*
+     * 批量导入：迁移专用，不做状态限制、不重生成 id（id 已由调用方给定）。
+     * 仅导入合法条目，失败静默。
+     */
+    function importMany(rawItems) {
+        var input = Array.isArray(rawItems) ? rawItems : [];
+        for (var i = 0; i < input.length; i++) {
+            var row = input[i] || {};
+            var item = normalize({
+                id: row.id,
+                kind: row.kind === 'todo' ? 'todo' : 'task',
+                title: row.title,
+                url: row.url,
+                categories: row.categories,
+                durationMs: row.durationMs,
+                accumulatedMs: row.accumulatedMs,
+                status: row.status,
+                source: row.source,
+                createdAt: row.createdAt === undefined ? now() : row.createdAt
+            });
+            if (!item) continue;
+            if (!item.id) item.id = makeId(item);
+            items.push(item);
+        }
+        commit();
+        return items.length;
+    }
+
     function add(raw) {
         var input = raw || {};
         var item = normalize({
@@ -205,6 +233,7 @@
             url: input.url,
             categories: input.categories,
             durationMs: input.durationMs,
+            accumulatedMs: input.accumulatedMs,
             status: input.status,
             source: input.source,
             createdAt: input.createdAt === undefined ? now() : input.createdAt
@@ -358,6 +387,7 @@
         list: list,
         get: get,
         add: add,
+        importMany: importMany,
         addMany: addMany,
         setStatus: setStatus,
         complete: complete,
