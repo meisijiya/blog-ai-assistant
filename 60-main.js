@@ -1549,6 +1549,18 @@
             rewindLastTurn();
             return;
         }
+        if (action === 'timer-start') {
+            AI.timer.start({ taskId: AI.timer.getState().taskId, targetMs: AI.timer.getState().targetMs });
+            return;
+        }
+        if (action === 'timer-pause') {
+            AI.timer.pause();
+            return;
+        }
+        if (action === 'timer-reset') {
+            AI.timer.reset();
+            return;
+        }
         if (action === 'resume') {
             // 断点续传：历史里已经有中断前那半截回答，再跑一轮把它写完
             if (state.controller) return;
@@ -1557,7 +1569,6 @@
         }
         if (action === 'toggle-context') {
             toggleContext();
-            return;
         }
         if (action === 'clear-quote') {
             state.quote = '';
