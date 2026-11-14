@@ -555,8 +555,31 @@
                 },
                 required: ['id', 'done']
             }
+        },
+        {
+            name: 'update_memory',
+            description: '把读者明说过的事实写进「读者画像」（她对你的记忆）：你是在替读者记她自己说过的话，比如「我喜欢短答」「我在准备软件测试实习面试」「我关心 Redis 缓存」。用法：entries 是一组键值对，key 用短名词（偏好 / 正在准备 / 关心……），value 写读者原话里的事实；text 可选，是一段说明性文字，整体作为一条记录写入。只写读者明确说过的内容：推断出来的要以「推断：」开头写清，读者可能不会认。禁止写入密码、密钥、身份证号、住址、电话、邮箱、第三方（他人）的私密数据、健康与医疗细节——这类内容会被直接拒写，不要尝试。也不要写「称呼」（叫读者笨蛋是固定行为，不进画像）。返回 {memory, changed, chars}：memory 是当前全部画像条目，changed 表示这次写入有没有改变内容（哈希一致就是没变），chars 是当前总字数（上限 200，超限会整体拒绝、不会截断，需要你自己压缩后重写）。读者手改过的条目带保护标记，写入会被跳过并在返回的 skipped 里列出，不要重复尝试覆盖。不要用它记录临时任务或检索结果——那属于清单与检索工具。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    entries: {
+                        type: 'array',
+                        description: '要写入的画像条目，每条 {key, value}；同 key 覆盖',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                key: { type: 'string', description: '短名词，如「偏好」「正在准备」' },
+                                value: { type: 'string', description: '读者说过的事实，保持原意' }
+                            },
+                            required: ['key', 'value']
+                        }
+                    },
+                    text: { type: 'string', description: '可选：整段说明文字，作为一条记录写入画像' }
+                },
+                required: ['entries']
+            }
         }
-    ];
+     ];
 
     /*
      * 工具失败也要给模型一条能走的路：
@@ -576,6 +599,73 @@
         return { error: message, suggestion: suggestion };
     }
 
+    /*
+     * 写画像：助手替读者记她自己说过的话，不需要读者点头。
+     * 拒写的原因要写进返回里（超限 / 敏感 / 保护条目），模型据此自己改写重写。
+     */
+    function updateMemory(args) {
+        var input = args || {};
+        var entries = [];
+        var list = Array.isArray(input.entries) ? input.entries : [];
+        for (var i = 0; i < list.length; i++) {
+            var one = list[i] || {};
+            var key = String(one.key == null ? '' : one.key).trim();
+            if (!key) continue;
+            entries.push({ key: key, value: String(one.value == null ? '' : one.value) });
+        }
+        var text = String(input.text == null ? '' : input.text).trim();
+        if (text) entries.push({ key: '补充', value: text });
+
+        if (!entries.length) {
+            return Promise.resolve({
+                error: '没有可写入的条目',
+                suggestion: 'entries 至少给一条 {key, value}；没有内容就不要调这个工具。',
+                memory: AI.memory ? AI.memory.get() : { entries: [] },
+                changed: false,
+                chars: AI.memory ? AI.memory.chars() : 0
+            });
+        }
+
+        var result = AI.memory.apply(entries, { source: 'ai' });
+        if (!result.ok) {
+            var payload = {
+                error: '',
+                suggestion: '',
+                memory: result.memory,
+                changed: false,
+                chars: result.chars
+            };
+            if (result.reason === 'over-limit') {
+                payload.error = '画像超出 ' + result.limit + ' 字上限，本次没有写入';
+                payload.suggestion = '把已有的几条压缩成更短的措辞，再重新调用一次；不要自己截断内容。';
+                payload.chars = result.chars;
+                payload.limit = result.limit;
+            } else if (result.reason === 'sensitive') {
+                var cats = [];
+                for (var h = 0; h < result.hits.length; h++) {
+                    cats.push(result.hits[h].key + '（' + result.hits[h].categories.join('/') + '）');
+                }
+                payload.error = '以下内容属于敏感信息，没有写入：' + cats.join('、');
+                payload.suggestion = '去掉敏感信息再写，或者干脆不记这条；不要换一种说法再试。';
+            } else {
+                payload.error = '没有写入任何条目';
+                payload.suggestion = '检查 entries 的形状：每条要有 key 与 value。';
+            }
+            return Promise.resolve(payload);
+        }
+
+        var out = {
+            memory: result.memory,
+            changed: !!result.changed,
+            chars: result.chars,
+            written: result.written
+        };
+        if (result.skipped && result.skipped.length) {
+            out.skipped = result.skipped;
+            out.note = '以下条目是读者自己改过的，已跳过没有覆盖：' + result.skipped.join('、');
+        }
+        return Promise.resolve(out);
+    }
     AI.tools = {
         definitions: function () {
             return DEFINITIONS;
@@ -589,6 +679,7 @@
                 else if (name === 'list_tasks') promise = listTasks(args);
                 else if (name === 'add_tasks') promise = addTasks(args);
                 else if (name === 'complete_task') promise = completeTask(args);
+                else if (name === 'update_memory') promise = updateMemory(args);
                 else return Promise.resolve(failureResult(new Error('未知工具：' + name), name));
             } catch (err) {
                 return Promise.resolve(failureResult(err, name));

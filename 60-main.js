@@ -403,7 +403,8 @@
             '3. 以读者当前阅读的小节为背景；用简体中文回答，代码放进代码块。',
             '4. 先 read_section(query=问题里的术语) 在本篇定位，命中就用它答；本篇没有才 search_articles 一次再 read_section 取正文。一次只下一层，通常 1~3 段就够；不要只说「我去找一下」就停下。',
             '5. 引用站内内容时写明出自哪篇哪一节，最多引 3 篇。没读到就直说没读到，不拿链接冒充答案；找不到就列出可能相关的标题。',
-            '6. 工具没拿到内容时换标题或换关键词重查，不要原样重发同一个调用；换不动就用已读到的内容作答。'
+            '6. 工具没拿到内容时换标题或换关键词重查，不要原样重发同一个调用；换不动就用已读到的内容作答。',
+            '7. 读者画像：读者明说过的偏好用 update_memory 记下来，下一轮它会随提问一起给你。只记读者明确说过的事实，推断要写「推断：」前缀；密码、密钥、身份证号、住址、电话、邮箱、他人的私密数据、健康与医疗细节一概不记。称呼不记进画像。画像上限 200 字，超限会被拒写——要自己压缩措辞后重写，不要截断。'
         ];
 
         var preset = presetById(state.config.presetId);
@@ -600,6 +601,23 @@
             empty.push(result.suggestion
                 || '换一个关键词或同义词重查，或先用 list_articles 缩小范围再检索，不要把同一个调用原样再发一遍。');
             return empty.join('\n');
+        }
+        /*
+         * 画像写入：结果里只留标识与字数，整份 memory 不进历史。
+         * 画像本身已经落盘，模型只需要知道写没写成、现在多长、跳过了谁。
+         */
+        if (result.memory && Array.isArray(result.memory.entries)) {
+            var mem = ['画像写入' + (result.changed ? '成功' : '无变化')];
+            if (typeof result.chars === 'number') {
+                mem.push('当前字数：' + result.chars + '/' + (AI.memory ? AI.memory.limit : 200));
+            }
+            if (result.written && result.written.length) mem.push('写入：' + result.written.join('、'));
+            if (result.skipped && result.skipped.length) {
+                mem.push('跳过（读者手改，受保护）：' + result.skipped.join('、'));
+            }
+            if (result.error) mem.push('未写入：' + result.error);
+            if (result.suggestion) mem.push('建议：' + result.suggestion);
+            return mem.join('\n');
         }
         if (result.error) {
             return '工具执行失败：' + result.error + '\n替代调用：' + (result.suggestion
@@ -1214,6 +1232,11 @@
                     break;
                 }
             }
+            /*
+             * 比对前先剥掉画像段：provider 历史存的是改写后的文本，
+             * 存储里是读者原话，直接比会失配，读者就找不到自己那条消息。
+             */
+            if (AI.memory) text = AI.memory.strip(text);
             if (text && (text === question || text.indexOf(question) === 0)) { cut = k; break; }
         }
         if (cut >= 0) {
@@ -1273,6 +1296,7 @@
         AI.ui.setError(null);
 
         // 提问里可能挂着划词引用，回填时只还原用户自己打的那部分
+        if (AI.memory) question = AI.memory.strip(question);
         var mark = question.indexOf('\n\n（我划选的内容：');
         if (mark >= 0) question = question.slice(0, mark);
         safeUi(AI.ui.setComposerValue, question);
@@ -1285,6 +1309,15 @@
         }
     }
 
+    /*
+     * 这一轮要不要带画像段：看画像内容有没有变，以及历史里还在不在那一段。
+     * 历史被压缩或回退撤掉之后，画像会跟着消失——那时要重新带一次。
+     */
+    function memoryDecision() {
+        if (!AI.memory) return { inject: false, segment: '', hash: '' };
+        return AI.memory.decision(state.sessionId, state.messages);
+    }
+
     function send(text) {
         var value = (text || '').trim();
         if (!value) return;
@@ -1294,7 +1327,20 @@
         }
         // 会话：一条会话同时装提问与回答，先保证有会话可装
         ensureSession();
-        state.messages.push({ role: 'user', content: [{ type: 'text', text: message }] });
+        /*
+         * 先压缩再决定要不要带画像：压缩可能把带画像段的那一轮丢掉，
+         * 那时这一轮必须重新带一次，否则画像随压缩消失。
+         */
+        compactHistory();
+        /*
+         * 画像注入：拼在读者原话**之前**，且只在画像有变更时带。
+         * provider 历史存改写后的文本，会话存储存读者原话——
+         * 回退按内容匹配时必须先剥掉画像段，否则读者找不到自己那条消息。
+         */
+        var decision = memoryDecision();
+        var providerText = decision.inject ? decision.segment + message : message;
+        state.messages.push({ role: 'user', content: [{ type: 'text', text: providerText }] });
+        if (decision.inject) AI.memory.markInjected(state.sessionId, decision.hash);
         persistTurn('user', message);
         var rewindIndex = -1;
         if (AI.sessions) {
