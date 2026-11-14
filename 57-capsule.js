@@ -194,6 +194,15 @@
 
     function sync() {
         render();
+        /*
+         * 胶囊藏起来（没开始、已归零）就停掉轮询：
+         * 常驻的 setInterval 会把 jsdom 里的事件循环钉住，门禁脚本跑完不退出；
+         * 真浏览器里也是白烧 250ms 一次的读矩形。
+         */
+        if (!capsule || capsule.hidden) {
+            stopTicking();
+            return;
+        }
         layout();
     }
 
@@ -203,6 +212,7 @@
      */
     function startTicking() {
         if (tickTimer !== null) return;
+        if (!capsule || capsule.hidden) return;
         tickTimer = window.setInterval(sync, 250);
     }
 
