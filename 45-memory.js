@@ -311,20 +311,13 @@
     }
 
     /*
-     * 这一轮要不要带画像段。
-     *
-     *  - 画像为空：不带；
-     *  - 画像内容变了（哈希不同）：带；
-     *  - 历史里已经没有画像段（刷新重建、压缩丢掉那一轮、回退撤掉那一轮）：再带一次；
-     *  - 其余情况：不带（画像已经在历史里，重复注入只是浪费上下文）。
+     * 这一轮要不要带画像段：画像为空不带；内容变了、或历史里已经没有那一段（刷新重建、
+     * 压缩丢掉那一轮、回退撤掉那一轮）时带；其余不带——重复注入只是浪费上下文。
      */
     function decision(sessionId, messages) {
         var memory = readMemory();
         if (!memory.entries.length) return { inject: false, segment: '', hash: '' };
         var hash = hashOf(memory.entries);
-        // 画像段已经在历史里、且内容没变：这一轮就不重复带了。
-        // 段不在历史里（首次、刷新重建、压缩丢掉那一轮、回退撤掉那一轮），
-        // 或内容哈希变了（新增/修改了条目）：这一轮重新带。
         if (historyHasSegment(messages) && stHash(sessionId) === hash) {
             return { inject: false, segment: '', hash: hash };
         }
@@ -356,6 +349,8 @@
         get: readMemory,
         entries: function () { return readMemory().entries; },
         chars: function () { return charCount(readMemory().entries); },
+        /* 草稿用完再落盘：设置页与主流程都按同一个口径算字数 */
+        countOf: charCount,
         hash: function () { return hashOf(readMemory().entries); },
         sensitiveHits: sensitiveHits,
         apply: apply,

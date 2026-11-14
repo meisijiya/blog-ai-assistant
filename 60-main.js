@@ -1512,7 +1512,6 @@
         AI.tasks.remove(id);
     }
 
-    /* 计时挂在具体条目上：开始时把条目标成计时中并把计时器切到它，停止时折回时长 */
     /* ------------------------------------------------------------ 读者画像 */
 
     /* 保存画像：编辑区是整体替换——先删掉草稿里没有的键，再把草稿写成访客手改 */
@@ -1520,8 +1519,7 @@
         if (!AI.memory) return;
         var draft = AI.ui.memoryDraft();
         var limit = AI.memory.limit;
-        var chars = 0;
-        for (var i = 0; i < draft.length; i++) chars += draft[i].key.length + draft[i].value.length;
+        var chars = AI.memory.countOf(draft);
         if (chars > limit) {
             AI.ui.setSaved(false, '画像超出 ' + limit + ' 字，没有保存');
             AI.ui.refreshMemoryCount();
@@ -1546,40 +1544,9 @@
         AI.ui.renderMemory();
     }
 
-    /* 新增一行空画像：只加 DOM，等访客填完点保存才落盘 */
+    /* 新增一行空画像：行结构由 ui 统一构造，这里只管动作 */
     function addMemoryRow() {
-        var rows = AI.ui.refs.memoryRows;
-        if (!rows) return;
-        var empty = rows.querySelector('.ai-memory-empty');
-        if (empty) empty.parentNode.removeChild(empty);
-        var row = document.createElement('div');
-        row.className = 'ai-memory-row';
-        row.dataset.source = 'me';
-        var key = document.createElement('input');
-        key.className = 'ai-input-line ai-memory-key';
-        key.type = 'text';
-        key.placeholder = '记什么';
-        key.dataset.memory = 'key';
-        var value = document.createElement('input');
-        value.className = 'ai-input-line ai-memory-value';
-        value.type = 'text';
-        value.placeholder = '内容';
-        value.dataset.memory = 'value';
-        var badge = document.createElement('span');
-        badge.className = 'ai-memory-badge';
-        badge.textContent = '我改的';
-        var del = document.createElement('button');
-        del.className = 'ai-btn ai-memory-del';
-        del.type = 'button';
-        del.dataset.act = 'memory-del';
-        del.textContent = '删除';
-        row.appendChild(key);
-        row.appendChild(value);
-        row.appendChild(badge);
-        row.appendChild(del);
-        rows.appendChild(row);
-        AI.ui.refreshMemoryCount();
-        if (key.focus) key.focus();
+        AI.ui.appendMemoryRow();
     }
 
     function undoMemory() {
@@ -1596,6 +1563,7 @@
         AI.ui.renderMemory();
     }
 
+    /* 计时挂在具体条目上：开始时把条目标成计时中并把计时器切到它，停止时折回时长 */
     function startTaskTiming(id) {
         if (!AI.tasks || !id) return;
         var item = AI.tasks.beginTiming(id);

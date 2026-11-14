@@ -207,10 +207,6 @@
     }
 
     /*
-     * 添加一条。kind 缺省按「待办」处理，source 缺省按「我写的」处理：
-     * 模型加进来的阅读任务会显式给 kind='task' 与 source='ai'。
-     */
-    /*
      * 批量导入：迁移专用，不做状态限制、不重生成 id（id 已由调用方给定）。
      * 仅导入合法条目，失败静默。
      */
@@ -238,6 +234,10 @@
         return items.length;
     }
 
+    /*
+     * 添加一条。kind 缺省按「待办」处理，source 缺省按「我写的」处理：
+     * 模型加进来的阅读任务会显式给 kind='task' 与 source='ai'。
+     */
     function add(raw) {
         var input = raw || {};
         var item = normalize({
@@ -410,6 +410,7 @@
         remove: remove,
         subscribe: subscribe,
         makeId: makeId,
+        slugify: slugify,
         yyyymmdd: yyyymmdd
     };
 })();

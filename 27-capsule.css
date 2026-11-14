@@ -19,7 +19,7 @@
     background: var(--ai-surface);
     color: var(--ai-ink);
     font-family: var(--ai-font);
-    font-size: 13px;
+    font-size: var(--ai-fs-meta);
     line-height: 1.4;
     white-space: nowrap;
     /* .ai-root 整体是 pointer-events: none，浮层自己打开 */

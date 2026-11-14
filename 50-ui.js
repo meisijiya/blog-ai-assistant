@@ -1271,10 +1271,7 @@
         if (!refs.memoryCount) return;
         var entries = memoryDraft();
         var limit = AI.memory ? AI.memory.limit : 200;
-        var chars = 0;
-        for (var i = 0; i < entries.length; i++) {
-            chars += entries[i].key.length + entries[i].value.length;
-        }
+        var chars = AI.memory ? AI.memory.countOf(entries) : 0;
         refs.memoryCount.textContent = chars + '/' + limit;
         var over = chars > limit;
         refs.memoryCount.classList.toggle('is-over', over);
@@ -3414,6 +3411,18 @@
         setError: setError,
         setSaved: setSaved,
         renderMemory: renderMemory,
+        /* 加一行空画像：DOM 构造只有 memoryRow 一份，主流程别再抄 */
+        appendMemoryRow: function () {
+            if (!refs.memoryRows) return null;
+            var empty = refs.memoryRows.querySelector('.ai-memory-empty');
+            if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
+            var row = memoryRow(null);
+            refs.memoryRows.appendChild(row);
+            refreshMemoryCount();
+            var input = row.querySelector('[data-memory="key"]');
+            if (input && input.focus) input.focus();
+            return row;
+        },
         memoryDraft: memoryDraft,
         refreshMemoryCount: refreshMemoryCount,
         setBusy: setBusy,

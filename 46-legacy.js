@@ -8,27 +8,23 @@
 (function () {
     'use strict';
 
-    function slugify(title) {
-        var raw = String(title || '').trim().toLowerCase();
-        var slug = raw.replace(/[^\w\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '');
-        if (!slug) slug = 'item';
-        if (slug.length > 12) slug = slug.slice(0, 12);
-        return slug;
-    }
-
-    function yyyymmdd(ts) {
-        var d = new Date(ts === undefined ? Date.now() : ts);
-        var m = String(d.getMonth() + 1);
-        var day = String(d.getDate());
-        if (m.length < 2) m = '0' + m;
-        if (day.length < 2) day = '0' + day;
-        return String(d.getFullYear()) + m + day;
-    }
-
     function parseDate(value) {
         if (typeof value === 'number' && isFinite(value)) return value;
         var t = Date.parse(value);
         return isFinite(t) ? t : Date.now();
+    }
+
+    /* 标识生成借用清单模块的导出：slugify 与日期戳各只有一份实现 */
+    function slugify(title) {
+        var AI = window.AIAssistant;
+        if (AI && AI.tasks && AI.tasks.slugify) return AI.tasks.slugify(title);
+        return 'item';
+    }
+
+    function stamp(ts) {
+        var AI = window.AIAssistant;
+        if (AI && AI.tasks && AI.tasks.yyyymmdd) return AI.tasks.yyyymmdd(ts);
+        return String(ts);
     }
 
     function migrate() {
@@ -67,7 +63,7 @@
                         var totalSeconds = Number(t.totalSeconds) || 0;
                         var remainingTime = Number(t.remainingTime) || 0;
                         importItems.push({
-                            id: 'task_' + slugify(t.name) + '_' + yyyymmdd(createdAt),
+                            id: 'task_' + slugify(t.name) + '_' + stamp(createdAt),
                             kind: 'task',
                             title: String(t.name || '').trim() || '未命名任务',
                             durationMs: totalSeconds * 1000,
@@ -93,7 +89,7 @@
                         var td = todosArr[j] || {};
                         var cAt = parseDate(td.createdAt);
                         importItems.push({
-                            id: 'todo_' + yyyymmdd(cAt) + '_' + (j + 1),
+                            id: 'todo_' + stamp(cAt) + '_' + (j + 1),
                             kind: 'todo',
                             title: String(td.content || '').trim() || '未命名待办',
                             status: td.completed ? 'done' : 'todo',
