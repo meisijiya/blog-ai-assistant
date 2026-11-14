@@ -1436,6 +1436,37 @@
     }
 
     /*
+     * 清单动作：访客自己写待办、勾掉、撤销、删掉自己写的条目。
+     * AI 排的条目不给删除（47-tasks.js 的 remove 也会挡一道）。
+     */
+    function addTaskFromPanel() {
+        if (!AI.tasks) return;
+        var input = AI.ui.refs.taskInput;
+        if (!input) return;
+        var title = String(input.value || '').trim();
+        if (!title) return;
+        AI.tasks.add({ kind: 'todo', title: title, source: 'me', status: 'todo' });
+        input.value = '';
+    }
+
+    function toggleTask(id) {
+        if (!AI.tasks || !id) return;
+        var item = AI.tasks.get(id);
+        if (!item) return;
+        AI.tasks.complete(id, item.status !== 'done');
+    }
+
+    function undoTask(id) {
+        if (!AI.tasks || !id) return;
+        AI.tasks.complete(id, false);
+    }
+
+    function deleteTask(id) {
+        if (!AI.tasks || !id) return;
+        AI.tasks.remove(id);
+    }
+
+    /*
      * 事件委托：动作属性挂在祖先上，按钮里的 SVG 图标、图标里的 path 才是 target，
      * 直接读 target.dataset 什么都取不到（点发送、点关闭都没反应，得点很多次）。
      * 一律用 closest 往上找最近的那个带 data-* 的祖先；
@@ -1583,6 +1614,22 @@
             AI.timer.reset();
             return;
         }
+        if (action === 'task-add') {
+            addTaskFromPanel();
+            return;
+        }
+        if (action === 'task-toggle') {
+            toggleTask(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-undo') {
+            undoTask(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-delete') {
+            deleteTask(hit.dataset.id);
+            return;
+        }
         if (action === 'resume') {
             // 断点续传：历史里已经有中断前那半截回答，再跑一轮把它写完
             if (state.controller) return;
@@ -1644,6 +1691,15 @@
         if (toggle && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
             toggleContext();
+            return;
+        }
+        /*
+         * 待办输入框里回车即加入（跟提问框一样，不用另按按钮）。
+         */
+        if (event.key === 'Enter' && event.target === AI.ui.refs.taskInput) {
+            if (event.isComposing || event.keyCode === 229) return;
+            event.preventDefault();
+            addTaskFromPanel();
             return;
         }
         /*

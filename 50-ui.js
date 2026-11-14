@@ -1332,8 +1332,116 @@
         refs.timerList = list;
         view.appendChild(list);
 
-        view.appendChild(el('p', 'ai-empty', '还没有任务。计时器先按「未选择任务」记着。'));
+        /*
+         * 清单：任务与待办同一张表（AI 排的 / 我写的用徽标区分）。
+         * 访客在这里手写待办、勾掉、撤销；AI 条目不提供删除。
+         */
+        var add = el('div', 'ai-task-add');
+        var input = el('input', 'ai-task-input');
+        input.type = 'text';
+        input.placeholder = '写一条待办…';
+        input.dataset.field = 'task-title';
+        input.setAttribute('aria-label', '新待办');
+        refs.taskInput = input;
+        var addBtn = el('button', 'ai-btn ai-btn-primary', '加入');
+        addBtn.type = 'button';
+        addBtn.dataset.act = 'task-add';
+        add.appendChild(input);
+        add.appendChild(addBtn);
+        refs.taskAdd = add;
+        view.appendChild(add);
+
+        var empty = el('p', 'ai-tasks-empty ai-empty', '清单是空的。上面写一条，或让一二给你排阅读清单。');
+        refs.tasksEmpty = empty;
+        view.appendChild(empty);
         return view;
+    }
+
+    var STATUS_TEXT = {
+        pending: '待确认',
+        todo: '待办',
+        running: '计时中',
+        done: '已完成'
+    };
+
+    /*
+     * 画清单：一条一个卡片，勾掉加删除线，AI 排的与我写的用徽标区分。
+     * 删除按钮只给自己写的条目——AI 排的条目不给删。
+     */
+    function renderTasks(items) {
+        var list = refs.timerList;
+        if (!list) return;
+        var rows = Array.isArray(items) ? items : [];
+        while (list.firstChild) list.removeChild(list.firstChild);
+        for (var i = 0; i < rows.length; i++) {
+            var item = rows[i];
+            var row = el('div', 'ai-task');
+            row.dataset.id = item.id;
+            row.dataset.status = item.status;
+            row.dataset.source = item.source;
+
+            var check = el('button', 'ai-task-check', item.status === 'done' ? '✓' : '');
+            check.type = 'button';
+            check.dataset.act = 'task-toggle';
+            check.dataset.id = item.id;
+            check.setAttribute('aria-label', item.status === 'done' ? '撤销完成' : '标记完成');
+            check.setAttribute('aria-pressed', item.status === 'done' ? 'true' : 'false');
+            row.appendChild(check);
+
+            var body = el('div', 'ai-task-body');
+            var title = el('p', 'ai-task-title', item.title);
+            body.appendChild(title);
+
+            var meta = el('div', 'ai-task-meta');
+            var badge = el('span', 'ai-task-badge', item.source === 'ai' ? 'AI 排的' : '我写的');
+            badge.dataset.source = item.source;
+            meta.appendChild(badge);
+            var status = el('span', 'ai-task-status', STATUS_TEXT[item.status] || item.status);
+            meta.appendChild(status);
+            if (item.url) {
+                var link = el('a', 'ai-task-url', item.url);
+                link.href = item.url;
+                link.textContent = item.url;
+                meta.appendChild(link);
+            }
+            var elapsed = AI.tasks ? AI.tasks.elapsedOf(item) : 0;
+            if (elapsed > 0) {
+                meta.appendChild(el('span', 'ai-task-status', '已用 ' + AI.timer.format(elapsed)));
+            }
+            body.appendChild(meta);
+            row.appendChild(body);
+
+            var acts = el('div', 'ai-task-acts');
+            if (item.status === 'done') {
+                var undo = el('button', 'ai-task-act', '撤销');
+                undo.type = 'button';
+                undo.dataset.act = 'task-undo';
+                undo.dataset.id = item.id;
+                acts.appendChild(undo);
+            }
+            if (item.source !== 'ai') {
+                var del = el('button', 'ai-task-act', '删除');
+                del.type = 'button';
+                del.dataset.act = 'task-delete';
+                del.dataset.id = item.id;
+                acts.appendChild(del);
+            }
+            if (acts.childNodes.length) row.appendChild(acts);
+
+            list.appendChild(row);
+        }
+        if (refs.tasksEmpty) refs.tasksEmpty.hidden = rows.length > 0;
+    }
+
+    /* 清单一变就重画：面板开着时也要跟着别的标签页的改动 */
+    var tasksUnsubscribe = null;
+
+    function syncTasks() {
+        if (!AI.tasks) return;
+        if (!tasksUnsubscribe) {
+            tasksUnsubscribe = AI.tasks.subscribe(renderTasks);
+        }
+        renderTasks(AI.tasks.list());
     }
 
     /*
@@ -1523,6 +1631,8 @@
         root.appendChild(bubble);
 
         document.body.appendChild(root);
+        // 清单先画一次：面板一挂上就有内容，不等切到计时视图
+        syncTasks();
         wireScrollArrows();
         // 标题栏要显示当前会话名，进来就得先对一次
         updateSessionLabel();
@@ -1647,6 +1757,8 @@
                 refs.panel.style.height = drawerHeight + 'px';
             }
         }
+        // 切到计时视图时对一次清单：别的标签页改过也能看到
+        if (view === 'timer') syncTasks();
         // 计时刷新只在计时视图开着时跑，别让后台空转
         syncTimerTicking(view === 'timer');
         // 设置视图的面板更高，切换后重新落位，把它夹回视口内
@@ -3147,6 +3259,9 @@
         closePresetList: closePresetList,
         positionPresetList: positionPresetList,
         renderMarkdown: renderMarkdown,
+        /* 清单：渲染与同步（60-main.js 的动作分发用） */
+        renderTasks: renderTasks,
+        syncTasks: syncTasks,
         /* 会话变化订阅：回调收到 {id, title, messages, reason} */
         onSessionChange: function (cb) {
             if (typeof cb !== 'function') return;

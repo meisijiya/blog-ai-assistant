@@ -135,6 +135,92 @@
         };
     }
 
+    /* 工具面没有删除能力：删除不可撤销，走面板 UI（见 47-tasks.js 的 remove） */
+
+    /* 清单条目精简成「标识、标题、状态、时长」：清单工具的返回值计入注入预算 */
+    function taskItem(item) {
+        var res = { id: item.id, kind: item.kind, title: item.title, status: item.status };
+        var duration = AI.tasks.elapsedOf(item);
+        if (duration > 0) res.durationMs = Math.round(duration);
+        return res;
+    }
+
+    function listTasks(args) {
+        var kind = (args && args.kind) || null;
+        if (kind !== 'task' && kind !== 'todo' && kind !== null) {
+            return Promise.resolve({
+                items: [],
+                total: 0,
+                error: 'kind 只能是 task、todo 或留空',
+                suggestion: '去掉 kind 看全部清单，或传 task / todo 分开看。'
+            });
+        }
+        var all = AI.tasks.list(kind ? { kind: kind } : {});
+        return Promise.resolve({
+            items: all.map(taskItem),
+            total: all.length
+        });
+    }
+
+    function addTasks(args) {
+        var input = (args && args.items) || [];
+        if (!Array.isArray(input) || !input.length) {
+            return Promise.resolve({
+                added: 0,
+                ids: [],
+                error: 'items 是空的',
+                suggestion: '把要加入的条目放进 items 数组（每条给 title，阅读任务另给 url），重试。'
+            });
+        }
+        if (input.length > MAX_LIST_ITEMS) {
+            return Promise.resolve({
+                added: 0,
+                ids: [],
+                error: '一次最多添加 ' + MAX_LIST_ITEMS + ' 条',
+                suggestion: '分几批添加，每批不超过 ' + MAX_LIST_ITEMS + ' 条。'
+            });
+        }
+        var result = AI.tasks.addMany(input, 'ai');
+        var added = result.added;
+        var payload = { added: added, ids: result.ids };
+        if (added < input.length) {
+            payload.note = '有 ' + (input.length - added) + ' 条没通过校验（标题为空或字段不对），已跳过。';
+        }
+        return Promise.resolve(payload);
+    }
+
+    function completeTask(args) {
+        var id = ((args && args.id) || '').trim();
+        if (!id) {
+            return Promise.resolve({
+                id: '',
+                done: false,
+                error: '缺少 id',
+                suggestion: '先用 list_tasks 拿到条目的 id，再带 id 调 complete_task。'
+            });
+        }
+        var item = AI.tasks.get(id);
+        if (!item) {
+            return Promise.resolve({
+                id: id,
+                done: false,
+                error: '清单里没有这个 id',
+                suggestion: '先用 list_tasks 核对 id 是否真实存在，不要把同一个 id 原样再发一遍。'
+            });
+        }
+        var done = !!(args && args.done);
+        var updated = AI.tasks.complete(id, done);
+        if (!updated) {
+            return Promise.resolve({
+                id: id,
+                done: item.status === 'done',
+                error: '当前状态是 ' + item.status + '，不能直接改成 ' + (done ? 'done' : 'todo'),
+                suggestion: '已完成与未完成之间可来回切换；先确认条目当前的状态。'
+            });
+        }
+        return Promise.resolve({ id: id, done: updated.status === 'done' });
+    }
+
     /*
      * 第二步：带上 section，取该标题的直属正文。
      * 正文只含这一层的内容，子标题的正文靠 children 再往下取。
@@ -422,6 +508,53 @@
                 },
                 required: []
             }
+        },
+        {
+            name: 'list_tasks',
+            description: '只读列出访客的清单（阅读任务与待办是同一张表，用 kind 区分）。kind 留空列出全部，kind="task" 只看带站内链接的阅读任务，kind="todo" 只看访客自己写的待办。返回每条的标识、标题、状态与已用时长，不含正文。用于回答「我今天要读什么」「清单里还有哪些没读」这类问题。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    kind: { type: 'string', description: '可选：task（阅读任务）或 todo（待办）；留空列出全部' }
+                },
+                required: []
+            }
+        },
+        {
+            name: 'add_tasks',
+            description: '把一批条目加入访客的清单。items 每条给 title（标题），阅读任务另给 url（站内链接）与可选 categories、durationMs（预估时长，毫秒）；kind 默认 task。重要：未得到访客明确要求时只给建议、不得直接调本工具——先把要加的清单摆给访客看，等访客点头再落盘；访客说「都加上」「加吧」之后才调。完成可撤销，本工具面没有删除能力：清单条目只能由访客在面板里处理。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    items: {
+                        type: 'array',
+                        description: '要加入的条目列表',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                title: { type: 'string', description: '标题（必填）' },
+                                url: { type: 'string', description: '站内链接，阅读任务用；待办不要给' },
+                                categories: { type: 'array', items: { type: 'string' }, description: '可选：文章分类' },
+                                durationMs: { type: 'number', description: '可选：预估阅读时长（毫秒）' }
+                            },
+                            required: ['title']
+                        }
+                    }
+                },
+                required: ['items']
+            }
+        },
+        {
+            name: 'complete_task',
+            description: '标记清单条目完成或撤销完成。done=true 标完成，done=false 撤销（回到未完成）。只按标识操作，先用 list_tasks 拿到真实的 id。完成可以撤销；本工具面没有删除能力，不要试图删除清单条目。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', description: '条目标识，来自 list_tasks' },
+                    done: { type: 'boolean', description: 'true 标完成，false 撤销完成' }
+                },
+                required: ['id', 'done']
+            }
         }
     ];
 
@@ -453,6 +586,9 @@
                 if (name === 'list_articles') promise = listArticles(args);
                 else if (name === 'search_articles') promise = searchArticles(args);
                 else if (name === 'read_section') promise = readSection(args);
+                else if (name === 'list_tasks') promise = listTasks(args);
+                else if (name === 'add_tasks') promise = addTasks(args);
+                else if (name === 'complete_task') promise = completeTask(args);
                 else return Promise.resolve(failureResult(new Error('未知工具：' + name), name));
             } catch (err) {
                 return Promise.resolve(failureResult(err, name));
