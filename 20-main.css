@@ -1593,9 +1593,13 @@
     stroke-linejoin: round;
 }
 
+/*
+ * 下拉列表：fixed 定位 + 必须高过面板（.ai-panel 是 10001）。
+ * 之前写 6，列表其实展开了却被面板整块盖住，看着像点不开。
+ */
 .ai-select-list {
     position: fixed;
-    z-index: 6;
+    z-index: 10003;
     margin: 0;
     padding: 4px;
     list-style: none;
@@ -1604,6 +1608,8 @@
     border-radius: var(--ai-r-control);
     background: var(--ai-surface);
     box-shadow: var(--ai-shadow-pop);
+    /* .ai-root 是 pointer-events: none，浮层必须自己接回来，否则列表看得见点不动 */
+    pointer-events: auto;
 }
 
 .ai-select-list li {

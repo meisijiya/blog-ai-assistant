@@ -16,7 +16,11 @@
     var AI = window.AIAssistant = window.AIAssistant || {};
 
     var STORAGE_KEY = 'ai-assistant.memory';
-    var MAX_CHARS = 200;
+    /*
+     * 画像总字数上限：键 + 值。200 字只够五六条，一条「偏好」就吃掉二三十字，
+     * 实际用起来立刻顶格；400 字能装十来条，仍远小于一次注入的正文预算。
+     */
+    var MAX_CHARS = 400;
     /* 画像段标识：整段用 <memory> 包起来，标签下第一行写权威说明 */
     var SEGMENT_HEAD = '<memory>';
     var SEGMENT_NOTE = '读者画像，可能过时；读者说错了以读者为准';
@@ -242,7 +246,9 @@
                 chars: currentChars,
                 projected: projected,
                 limit: MAX_CHARS,
-                memory: current
+                memory: current,
+                // 超限要把现有条目一并回给模型：它得知道压缩哪几条，不能盲写
+                entries: current.entries
             };
         }
 

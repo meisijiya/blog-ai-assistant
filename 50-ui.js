@@ -1066,7 +1066,12 @@
         list.id = 'ai-preset-list';
         list.setAttribute('role', 'listbox');
         list.hidden = true;
-        select.appendChild(list);
+        /*
+         * 挂到 .ai-root 而不是 select 里：面板有 transform + overflow:hidden，
+         * 面板内的 fixed 元素会被按面板裁剪，列表等于看不见（点了像没反应）。
+         * 浮层一律挂 .ai-root 也是仓库既有约定。
+         */
+        (refs.root || select).appendChild(list);
 
         refs.presetButton = button;
         refs.presetList = list;
@@ -1584,7 +1589,15 @@
         row.appendChild(check);
 
         var body = el('div', 'ai-task-body');
-        var title = el('p', 'ai-task-title', item.title);
+        /*
+         * 标题本身就是链接：之前标题一行、下面再摊一条 URL，
+         * 同一个标题写两遍还占两行，面板里一条就吃掉三分之一屏。
+         */
+        var title = item.url ? el('a', 'ai-task-title ai-task-title-link', item.title) : el('p', 'ai-task-title', item.title);
+        if (item.url) {
+            title.href = item.url;
+            title.title = item.url;
+        }
         body.appendChild(title);
 
         var meta = el('div', 'ai-task-meta');
@@ -1599,13 +1612,6 @@
         }
         body.appendChild(meta);
 
-        /* 链接只放文章标题，点标题跳过去：路径摆在正文里读者读不出是什么 */
-        if (item.url) {
-            var link = el('a', 'ai-task-url', item.title);
-            link.href = item.url;
-            link.title = item.url;
-            body.appendChild(link);
-        }
         row.appendChild(body);
 
         var acts = el('div', 'ai-task-acts');
@@ -3076,11 +3082,13 @@
         var box = refs.presetButton.getBoundingClientRect();
         var height = refs.presetList.offsetHeight;
         var below = window.innerHeight - box.bottom - 12;
+        var top = below >= height + 8 ? box.bottom + 4 : box.top - height - 4;
+        // 按钮被滚到视口外时（设置区自己滚），列表也不能跟着跑出屏幕：
+        // 上下都夹在视口内，宁可盖住按钮也不能挂在看不见的地方
+        top = Math.max(8, Math.min(top, window.innerHeight - height - 8));
         refs.presetList.style.left = box.left + 'px';
         refs.presetList.style.width = box.width + 'px';
-        refs.presetList.style.top = (below >= height + 8
-            ? box.bottom + 4
-            : Math.max(8, box.top - height - 4)) + 'px';
+        refs.presetList.style.top = top + 'px';
     }
 
     function openPresetList() {

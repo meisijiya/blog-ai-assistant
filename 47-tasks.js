@@ -21,6 +21,8 @@
     var AI = window.AIAssistant = window.AIAssistant || {};
 
     var STORAGE_KEY = 'ai-assistant.tasks';
+    /* 层级上限：4 层。再深在窄面板里缩进吃掉正文宽度 */
+    var MAX_DEPTH = 4;
 
     var items = [];
     var subscribers = [];
@@ -271,7 +273,8 @@
             for (var q = 0; q < items.length; q++) {
                 if (items[q].id === item.parentId) { hasParent = true; break; }
             }
-            if (!hasParent || depthOf(item.parentId) >= 3) delete item.parentId;
+            /* 第 4 层以下挂不上去：再深在窄面板里读不动，应拆成并列的父条目 */
+            if (!hasParent || depthOf(item.parentId) >= MAX_DEPTH) delete item.parentId;
         }
         item.id = makeId(item);
         items.push(item);

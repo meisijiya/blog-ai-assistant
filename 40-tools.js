@@ -182,7 +182,40 @@
                 suggestion: '分几批添加，每批不超过 ' + MAX_LIST_ITEMS + ' 条。'
             });
         }
-        var result = AI.tasks.addMany(input, 'ai');
+        /*
+         * 一次调用建树：条目可以带 ref（本次调用内的临时名），子条目用 parentRef 指向它。
+         * 模型拿不到「还没创建的条目的 id」，不给临时名就只能先 add 再 list 再补一轮，
+         * 而写预算只有 3 轮。
+         */
+        var refMap = {};
+        var staged = [];
+        for (var i = 0; i < input.length; i++) {
+            var row = input[i] || {};
+            var parentId = '';
+            if (row.parentRef) {
+                parentId = refMap[row.parentRef] || '';
+            } else if (row.parentId) {
+                parentId = String(row.parentId);
+            }
+            var created = AI.tasks.add({
+                kind: row.kind === 'todo' ? 'todo' : 'task',
+                title: row.title,
+                url: row.url,
+                categories: row.categories,
+                durationMs: row.durationMs,
+                status: row.status,
+                parentId: parentId,
+                source: 'ai'
+            });
+            if (!created) {
+                staged.push(null);
+                continue;
+            }
+            if (row.ref) refMap[String(row.ref)] = created.id;
+            staged.push(created);
+        }
+        var okItems = staged.filter(function (one) { return !!one; });
+        var result = { added: okItems.length, ids: okItems.map(function (one) { return one.id; }) };
         var added = result.added;
         var payload = { added: added, ids: result.ids };
         if (added < input.length) {
@@ -546,7 +579,7 @@
         },
         {
             name: 'add_tasks',
-            description: '把一批条目加入访客的清单。items 每条给 title（标题），阅读任务另给 url（站内链接）与可选 categories、durationMs（预估时长，毫秒）；kind 默认 task。重要：未得到访客明确要求时只给建议、不得直接调本工具——先把要加的清单摆给访客看，等访客点头再落盘；访客说「都加上」「加吧」之后才调。完成可撤销，本工具面没有删除能力：清单条目只能由访客在面板里处理。要表达「先做这一步、再往下做这几步」时，用 parentId 把子条目挂到父条目下（最多 3 层）。',
+            description: '把一批条目加入访客的清单。items 每条给 title（标题），阅读任务另给 url（站内链接）与可选 categories、durationMs（预估时长，毫秒）；kind 默认 task。重要：未得到访客明确要求时只给建议、不得直接调本工具——先把要加的清单摆给访客看，等访客点头再落盘；访客说「都加上」「加吧」之后才调。完成可撤销，本工具面没有删除能力：清单条目只能由访客在面板里处理。要表达「先做这一步、再往下做这几步」时用层级：给条目 ref（临时名），子条目用 parentRef 指向它，一次调用就能建出树；挂到已有条目下用 parentId。层级最多 4 层，更深的拆成并列父条目。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -560,7 +593,9 @@
                                 url: { type: 'string', description: '站内链接，阅读任务用；待办不要给' },
                                 categories: { type: 'array', items: { type: 'string' }, description: '可选：文章分类' },
                                 durationMs: { type: 'number', description: '可选：预估阅读时长（毫秒）' },
-                                parentId: { type: 'string', description: '可选：父条目标识，用来把「做完这步再往下做哪几步」挂在一条下面；层级最多 3 层，缺省挂根上' }
+                                parentId: { type: 'string', description: '可选：父条目标识（来自 list_tasks）；要挂在本次新建的条目下时改用 parentRef' },
+                                ref: { type: 'string', description: '可选：本次调用内的临时名，供子条目的 parentRef 引用' },
+                                parentRef: { type: 'string', description: '可选：父条目的临时名（同一次调用里另一个条目的 ref）' }
                             },
                             required: ['title']
                         }
@@ -592,7 +627,7 @@
         },
         {
             name: 'update_memory',
-            description: '把读者明说过的事实写进「读者画像」（她对你的记忆）：你是在替读者记她自己说过的话，比如「我喜欢短答」「我在准备软件测试实习面试」「我关心 Redis 缓存」。用法：entries 是一组键值对，key 用短名词（偏好 / 正在准备 / 关心……），value 写读者原话里的事实；text 可选，是一段说明性文字，整体作为一条记录写入。只写读者明确说过的内容：推断出来的要以「推断：」开头写清，读者可能不会认。禁止写入密码、密钥、身份证号、住址、电话、邮箱、第三方（他人）的私密数据、健康与医疗细节——这类内容会被直接拒写，不要尝试。也不要写「称呼」（叫读者笨蛋是固定行为，不进画像）。返回 {memory, changed, chars}：memory 是当前全部画像条目，changed 表示这次写入有没有改变内容（哈希一致就是没变），chars 是当前总字数（上限 200，超限会整体拒绝、不会截断，需要你自己压缩后重写）。读者手改过的条目带保护标记，写入会被跳过并在返回的 skipped 里列出，不要重复尝试覆盖。不要用它记录临时任务或检索结果——那属于清单与检索工具。',
+            description: '把读者明说过的事实写进「读者画像」（她对你的记忆）：你是在替读者记她自己说过的话，比如「我喜欢短答」「我在准备软件测试实习面试」「我关心 Redis 缓存」。用法：entries 是一组键值对，key 用短名词（偏好 / 正在准备 / 关心……），value 写读者原话里的事实；text 可选，是一段说明性文字，整体作为一条记录写入。只写读者明确说过的内容：推断出来的要以「推断：」开头写清，读者可能不会认。禁止写入密码、密钥、身份证号、住址、电话、邮箱、第三方（他人）的私密数据、健康与医疗细节——这类内容会被直接拒写，不要尝试。也不要写「称呼」（叫读者笨蛋是固定行为，不进画像）。返回 {memory, changed, chars}：memory 是当前全部画像条目，changed 表示这次写入有没有改变内容（哈希一致就是没变），chars 是当前总字数（上限 400，超限会整体拒绝、不会截断；超限时返回里带 entries 现有条目，先合并压缩再整批重写）。读者手改过的条目带保护标记，写入会被跳过并在返回的 skipped 里列出，不要重复尝试覆盖。不要用它记录临时任务或检索结果——那属于清单与检索工具。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -671,7 +706,7 @@
             };
             if (result.reason === 'over-limit') {
                 payload.error = '画像超出 ' + result.limit + ' 字上限，本次没有写入';
-                payload.suggestion = '把已有的几条压缩成更短的措辞，再重新调用一次；不要自己截断内容。';
+                payload.suggestion = '先看返回里的 entries（现有条目），把能合并的合并、能缩短的缩短，再整批重写一次；不要自己截断内容，也不要只加不删。';
                 payload.chars = result.chars;
                 payload.limit = result.limit;
             } else if (result.reason === 'sensitive') {

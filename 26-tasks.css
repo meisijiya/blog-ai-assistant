@@ -9,8 +9,8 @@
 .ai-task {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 7px 10px;
     border: 1px solid var(--ai-border);
     border-radius: var(--ai-r-control);
     background: var(--ai-surface);
@@ -18,16 +18,16 @@
 }
 
 .ai-task + .ai-task {
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 /* 勾选按钮：自画，不用原生 checkbox 的盒子 */
 .ai-task-check {
     appearance: none;
     flex: none;
-    width: 22px;
-    height: 22px;
-    margin-top: 1px;
+    width: 20px;
+    height: 20px;
+    margin-top: 0;
     border: 1px solid var(--ai-border-strong);
     border-radius: var(--ai-r-pill);
     background: var(--ai-surface);
@@ -67,9 +67,23 @@
 .ai-task-title {
     margin: 0;
     font-size: var(--ai-fs-label);
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--ai-ink);
     overflow-wrap: anywhere;
+}
+
+/* 标题即链接：下划线只在悬停时出现，平时靠颜色区分 */
+.ai-task-title-link {
+    color: var(--ai-accent);
+    text-decoration: none;
+}
+
+.ai-task-title-link:hover {
+    text-decoration: underline;
+}
+
+.ai-task[data-status="done"] .ai-task-title-link {
+    color: var(--ai-ink-3);
 }
 
 /* 已完成：删除线 + 次级色 */
@@ -83,10 +97,10 @@
 .ai-task-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
     align-items: center;
     font-size: var(--ai-fs-meta);
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--ai-ink-3);
 }
 
@@ -113,10 +127,10 @@
     display: inline-flex;
     align-items: center;
     flex: none;
-    padding: 1px 8px;
+    padding: 0 7px;
     border-radius: var(--ai-r-pill);
     font-size: var(--ai-fs-meta);
-    line-height: 1.6;
+    line-height: 1.5;
     background: var(--ai-field);
     color: var(--ai-ink-2);
 }
@@ -152,8 +166,8 @@
 
 .ai-task-act {
     appearance: none;
-    padding: 4px 10px;
-    min-height: 28px;
+    padding: 2px 9px;
+    min-height: 26px;
     border: 1px solid var(--ai-border-strong);
     border-radius: var(--ai-r-chip);
     background: var(--ai-surface);
@@ -203,16 +217,21 @@
 
 /* 层级：每深一层左侧让一格，子条目不再和父条目同高同宽 */
 .ai-task[data-depth="1"] {
-    margin-left: 20px;
+    margin-left: 16px;
     border-left: 2px solid var(--ai-border);
 }
 
 .ai-task[data-depth="2"] {
-    margin-left: 40px;
+    margin-left: 32px;
     border-left: 2px solid var(--ai-border);
 }
 
 /* 待确认的提案：确认键给主色，一眼看出该点哪个 */
+.ai-task[data-depth="3"] {
+    margin-left: 48px;
+    border-left: 2px solid var(--ai-border);
+}
+
 .ai-task-act-primary {
     border-color: var(--ai-accent);
     background: var(--ai-accent);
