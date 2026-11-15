@@ -708,6 +708,8 @@
                 payload.error = '画像超出 ' + result.limit + ' 字上限，本次没有写入';
                 payload.suggestion = '先看返回里的 entries（现有条目），把能合并的合并、能缩短的缩短，再整批重写一次；不要自己截断内容，也不要只加不删。';
                 payload.chars = result.chars;
+                // 超限时要让模型看到现有条目，否则「压缩后重写」只是空话
+                payload.entries = result.entries || (result.memory && result.memory.entries) || [];
                 payload.limit = result.limit;
             } else if (result.reason === 'sensitive') {
                 var cats = [];
