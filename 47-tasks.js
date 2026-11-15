@@ -428,8 +428,8 @@
 
     /*
      * 删除只在面板里用；模型没有对应工具。
-     * 访客自己写的条目随时可删；AI 排的条目只有在「待确认」时能被访客否掉
-     * （那还只是提案），一旦确认成待办就不再可删。子条目跟着一起走。
+     * 访客对任何状态都能删（提案另有「不要」），不区分 AI 排的还是自己写的——
+     * 同一条清单里操作不一致，访客得先记住每条是谁写的。子条目跟着一起走。
      */
     function remove(id) {
         var target = null;
@@ -437,7 +437,6 @@
             if (items[i].id === id) { target = items[i]; break; }
         }
         if (!target) return null;
-        if (target.source === 'ai' && target.status !== 'pending') return null;
 
         // 连带子条目一起删：从目标开始按 parentId 逐层收集
         var doomed = [id];
