@@ -1512,83 +1512,174 @@
      * 画清单：一条一个卡片，勾掉加删除线，AI 排的与我写的用徽标区分。
      * 删除按钮只给自己写的条目——AI 排的条目不给删。
      */
+    /* 折叠状态只在这次会话里记：刷新后重新展开，不让坏状态留着 */
+    var foldedTasks = {};
+
+    /*
+     * 清单按树渲染：兄弟节点按创建时间正序，层级最多 3 层。
+     * 一条任务下面通常还挂着「做完这步再往下做哪几步」，所以父节点带折叠开关。
+     */
     function renderTasks(items) {
         var list = refs.timerList;
         if (!list) return;
         var rows = Array.isArray(items) ? items : [];
         while (list.firstChild) list.removeChild(list.firstChild);
-        for (var i = 0; i < rows.length; i++) {
-            var item = rows[i];
-            var row = el('div', 'ai-task');
-            row.dataset.id = item.id;
-            row.dataset.status = item.status;
-            row.dataset.source = item.source;
 
-            var check = el('button', 'ai-task-check', item.status === 'done' ? '✓' : '');
-            check.type = 'button';
-            check.dataset.act = 'task-toggle';
-            check.dataset.id = item.id;
-            check.setAttribute('aria-label', item.status === 'done' ? '撤销完成' : '标记完成');
-            check.setAttribute('aria-pressed', item.status === 'done' ? 'true' : 'false');
-            row.appendChild(check);
-
-            var body = el('div', 'ai-task-body');
-            var title = el('p', 'ai-task-title', item.title);
-            body.appendChild(title);
-
-            var meta = el('div', 'ai-task-meta');
-            var badge = el('span', 'ai-task-badge', item.source === 'ai' ? 'AI 排的' : '我写的');
-            badge.dataset.source = item.source;
-            meta.appendChild(badge);
-            var status = el('span', 'ai-task-status', STATUS_TEXT[item.status] || item.status);
-            meta.appendChild(status);
-            if (item.url) {
-                var link = el('a', 'ai-task-url', item.url);
-                link.href = item.url;
-                link.textContent = item.url;
-                meta.appendChild(link);
-            }
-            var elapsed = AI.tasks ? AI.tasks.elapsedOf(item) : 0;
-            if (elapsed > 0) {
-                meta.appendChild(el('span', 'ai-task-status', '已用 ' + AI.timer.format(elapsed)));
-            }
-            body.appendChild(meta);
-            row.appendChild(body);
-
-            var acts = el('div', 'ai-task-acts');
-            if (item.status === 'todo' || item.status === 'pending') {
-                var startBtn = el('button', 'ai-task-act', '计时');
-                startBtn.type = 'button';
-                startBtn.dataset.act = 'task-start';
-                startBtn.dataset.id = item.id;
-                acts.appendChild(startBtn);
-            }
-            if (item.status === 'running') {
-                var stopBtn = el('button', 'ai-task-act', '停止计时');
-                stopBtn.type = 'button';
-                stopBtn.dataset.act = 'task-stop';
-                stopBtn.dataset.id = item.id;
-                acts.appendChild(stopBtn);
-            }
-            if (item.status === 'done') {
-                var undo = el('button', 'ai-task-act', '撤销');
-                undo.type = 'button';
-                undo.dataset.act = 'task-undo';
-                undo.dataset.id = item.id;
-                acts.appendChild(undo);
-            }
-            if (item.source !== 'ai') {
-                var del = el('button', 'ai-task-act', '删除');
-                del.type = 'button';
-                del.dataset.act = 'task-delete';
-                del.dataset.id = item.id;
-                acts.appendChild(del);
-            }
-            if (acts.childNodes.length) row.appendChild(acts);
-
-            list.appendChild(row);
+        var byId = {};
+        for (var b = 0; b < rows.length; b++) byId[rows[b].id] = rows[b];
+        var roots = [];
+        for (var r = 0; r < rows.length; r++) {
+            var parent = rows[r].parentId;
+            if (parent && byId[parent]) continue;
+            roots.push(rows[r]);
         }
+        var order = function (a, b) {
+            if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+            return a.id < b.id ? -1 : 1;
+        };
+        roots.sort(order);
+
+        var paint = function (item, depth) {
+            var kids = AI.tasks && AI.tasks.childrenOf ? AI.tasks.childrenOf(item.id) : [];
+            kids.sort(order);
+            list.appendChild(buildTaskRow(item, depth, kids.length > 0));
+            if (!kids.length || foldedTasks[item.id]) return;
+            for (var k = 0; k < kids.length; k++) paint(kids[k], depth + 1);
+        };
+        for (var i = 0; i < roots.length; i++) paint(roots[i], 0);
+
         if (refs.tasksEmpty) refs.tasksEmpty.hidden = rows.length > 0;
+    }
+
+    /* 一行清单：勾选、标题、来源与状态、折叠开关、动作 */
+    function buildTaskRow(item, depth, hasKids) {
+        var row = el('div', 'ai-task');
+        row.dataset.id = item.id;
+        row.dataset.status = item.status;
+        row.dataset.source = item.source;
+        row.dataset.depth = String(depth);
+
+        /*
+         * 折叠开关放在最前面：有子条目才出现，点它只改这一次会话的展开状态，
+         * 不动存储（层级本身是数据，展开与否是视图）。
+         */
+        if (hasKids) {
+            var fold = el('button', 'ai-task-fold', foldedTasks[item.id] ? '▸' : '▾');
+            fold.type = 'button';
+            fold.dataset.act = 'task-fold';
+            fold.dataset.id = item.id;
+            fold.setAttribute('aria-label', foldedTasks[item.id] ? '展开子条目' : '折叠子条目');
+            fold.setAttribute('aria-expanded', foldedTasks[item.id] ? 'false' : 'true');
+            row.appendChild(fold);
+        } else {
+            row.appendChild(el('span', 'ai-task-fold-placeholder', ''));
+        }
+
+        var check = el('button', 'ai-task-check', item.status === 'done' ? '✓' : '');
+        check.type = 'button';
+        check.dataset.act = 'task-toggle';
+        check.dataset.id = item.id;
+        check.setAttribute('aria-label', item.status === 'done' ? '撤销完成' : '标记完成');
+        check.setAttribute('aria-pressed', item.status === 'done' ? 'true' : 'false');
+        row.appendChild(check);
+
+        var body = el('div', 'ai-task-body');
+        var title = el('p', 'ai-task-title', item.title);
+        body.appendChild(title);
+
+        var meta = el('div', 'ai-task-meta');
+        var badge = el('span', 'ai-task-badge', item.source === 'ai' ? 'AI 排的' : '我写的');
+        badge.dataset.source = item.source;
+        meta.appendChild(badge);
+        var status = el('span', 'ai-task-status', STATUS_TEXT[item.status] || item.status);
+        meta.appendChild(status);
+        var elapsed = AI.tasks ? AI.tasks.elapsedOf(item) : 0;
+        if (elapsed > 0) {
+            meta.appendChild(el('span', 'ai-task-status', '已用 ' + AI.timer.format(elapsed)));
+        }
+        body.appendChild(meta);
+
+        /* 链接只放文章标题，点标题跳过去：路径摆在正文里读者读不出是什么 */
+        if (item.url) {
+            var link = el('a', 'ai-task-url', item.title);
+            link.href = item.url;
+            link.title = item.url;
+            body.appendChild(link);
+        }
+        row.appendChild(body);
+
+        var acts = el('div', 'ai-task-acts');
+        if (item.status === 'pending') {
+            var yes = el('button', 'ai-task-act ai-task-act-primary', '确认');
+            yes.type = 'button';
+            yes.dataset.act = 'task-confirm';
+            yes.dataset.id = item.id;
+            acts.appendChild(yes);
+            var no = el('button', 'ai-task-act', '不要');
+            no.type = 'button';
+            no.dataset.act = 'task-reject';
+            no.dataset.id = item.id;
+            acts.appendChild(no);
+        }
+        if (item.status === 'todo' || item.status === 'running') {
+            var child = el('button', 'ai-task-act', '加一步');
+            child.type = 'button';
+            child.dataset.act = 'task-child';
+            child.dataset.id = item.id;
+            acts.appendChild(child);
+        }
+        if (item.status === 'todo') {
+            var startBtn = el('button', 'ai-task-act', '计时');
+            startBtn.type = 'button';
+            startBtn.dataset.act = 'task-start';
+            startBtn.dataset.id = item.id;
+            acts.appendChild(startBtn);
+        }
+        if (item.status === 'running') {
+            var stopBtn = el('button', 'ai-task-act', '停止计时');
+            stopBtn.type = 'button';
+            stopBtn.dataset.act = 'task-stop';
+            stopBtn.dataset.id = item.id;
+            acts.appendChild(stopBtn);
+        }
+        if (item.status === 'done') {
+            var undo = el('button', 'ai-task-act', '撤销');
+            undo.type = 'button';
+            undo.dataset.act = 'task-undo';
+            undo.dataset.id = item.id;
+            acts.appendChild(undo);
+        }
+        /* AI 的提案用「不要」否掉，不再另给删除按钮 */
+        if (item.source !== 'ai') {
+            var del = el('button', 'ai-task-act', '删除');
+            del.type = 'button';
+            del.dataset.act = 'task-delete';
+            del.dataset.id = item.id;
+            acts.appendChild(del);
+        }
+        if (acts.childNodes.length) row.appendChild(acts);
+        return row;
+    }
+
+    /* 折叠/展开一条的子条目：只改这次会话的视图状态 */
+    function toggleTaskFold(id) {
+        foldedTasks[id] = !foldedTasks[id];
+        renderTasks(AI.tasks ? AI.tasks.list() : []);
+    }
+
+    /* 「加一步」的落点：点过哪条，输入框就写到它下面 */
+    function setTaskParent(id) {
+        refs.taskParentId = id || null;
+        if (refs.taskInput) {
+            var title = '';
+            if (id && AI.tasks) {
+                var parent = AI.tasks.get(id);
+                title = parent ? parent.title : '';
+            }
+            refs.taskInput.placeholder = id
+                ? '加到「' + title + '」下面…'
+                : '写一条待办…';
+        }
     }
 
     /* 清单一变就重画：面板开着时也要跟着别的标签页的改动 */
@@ -3435,6 +3526,9 @@
         renderMarkdown: renderMarkdown,
         /* 清单：渲染与同步（60-main.js 的动作分发用） */
         renderTasks: renderTasks,
+        setTaskParent: setTaskParent,
+        toggleTaskFold: toggleTaskFold,
+        taskParentId: function () { return refs.taskParentId || null; },
         syncTasks: syncTasks,
         /* 会话变化订阅：回调收到 {id, title, messages, reason} */
         onSessionChange: function (cb) {

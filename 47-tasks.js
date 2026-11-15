@@ -84,6 +84,10 @@
                 item.durationMs = Math.floor(raw.durationMs);
             }
         }
+        /* 层级：parentId 指向同表的另一条；指向不存在的条目按根处理，深度上限 3 层 */
+        if (typeof raw.parentId === 'string' && raw.parentId) item.parentId = raw.parentId;
+        /* 层级：parentId 指向同表另一条；断链与超深的条目按根处理 */
+        if (typeof raw.parentId === 'string' && raw.parentId) item.parentId = raw.parentId;
         if (!item.id) item.id = makeId(item);
         return item;
     }
@@ -257,13 +261,54 @@
             accumulatedMs: input.accumulatedMs,
             status: status,
             source: source,
+            parentId: typeof input.parentId === 'string' ? input.parentId : '',
             createdAt: input.createdAt === undefined ? now() : input.createdAt
         });
         if (!item) return null;
+        /* 层级上限 3 层：父条目不存在、或父已在第 3 层，就把这条放到根上 */
+        if (item.parentId) {
+            var hasParent = false;
+            for (var q = 0; q < items.length; q++) {
+                if (items[q].id === item.parentId) { hasParent = true; break; }
+            }
+            if (!hasParent || depthOf(item.parentId) >= 3) delete item.parentId;
+        }
         item.id = makeId(item);
         items.push(item);
         commit();
         return item;
+    }
+
+    /* 一条在哪一层：根为 1。断链按 1 算，避免坏数据把渲染拖进死循环 */
+    function depthOf(id) {
+        var depth = 1;
+        var cursor = id;
+        var guard = 0;
+        while (cursor && guard < 10) {
+            var parent = null;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].id === cursor) { parent = items[i]; break; }
+            }
+            if (!parent || !parent.parentId) break;
+            cursor = parent.parentId;
+            depth += 1;
+            guard += 1;
+        }
+        return depth;
+    }
+
+    /* 子条目（按创建时间正序）：树形渲染与「加一步」都用它 */
+    function childrenOf(id) {
+        var out = [];
+        for (var i = 0; i < items.length; i++) {
+            if ((items[i].parentId || '') !== (id || '')) continue;
+            out.push(items[i]);
+        }
+        out.sort(function (a, b) {
+            if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+            return a.id < b.id ? -1 : 1;
+        });
+        return out;
     }
 
     /* 批量添加：逐条独立成功，一条不合格不影响别的 */
@@ -280,6 +325,7 @@
                 url: row.url,
                 categories: row.categories,
                 durationMs: row.durationMs,
+                parentId: row.parentId,
                 status: row.status,
                 source: source || row.source
             });
@@ -378,20 +424,35 @@
     /* ------------------------------------------------------------ 删除 */
 
     /*
-     * 删除只给访客自己写的条目，且只在面板里用；模型没有对应工具。
-     * AI 排的条目一律不删（source === 'ai' 直接拒绝）。
+     * 删除只在面板里用；模型没有对应工具。
+     * 访客自己写的条目随时可删；AI 排的条目只有在「待确认」时能被访客否掉
+     * （那还只是提案），一旦确认成待办就不再可删。子条目跟着一起走。
      */
     function remove(id) {
+        var target = null;
         for (var i = 0; i < items.length; i++) {
-            if (items[i].id !== id) continue;
-            if (items[i].source === 'ai') return null;
-            items.splice(i, 1);
-            delete runningSince[id];
-            if (runningId === id) runningId = null;
-            commit();
-            return true;
+            if (items[i].id === id) { target = items[i]; break; }
         }
-        return null;
+        if (!target) return null;
+        if (target.source === 'ai' && target.status !== 'pending') return null;
+
+        // 连带子条目一起删：从目标开始按 parentId 逐层收集
+        var doomed = [id];
+        var grew = true;
+        while (grew) {
+            grew = false;
+            for (var j = 0; j < items.length; j++) {
+                if (doomed.indexOf(items[j].id) >= 0) continue;
+                if (doomed.indexOf(items[j].parentId) < 0) continue;
+                doomed.push(items[j].id);
+                grew = true;
+            }
+        }
+        items = items.filter(function (one) { return doomed.indexOf(one.id) < 0; });
+        for (var d = 0; d < doomed.length; d++) delete runningSince[doomed[d]];
+        if (runningId && doomed.indexOf(runningId) >= 0) runningId = null;
+        commit();
+        return true;
     }
 
     /* ------------------------------------------------------------ 订阅 */
@@ -435,6 +496,8 @@
         endTiming: endTiming,
         elapsedOf: elapsedOf,
         remove: remove,
+        childrenOf: childrenOf,
+        depthOf: depthOf,
         subscribe: subscribe,
         makeId: makeId,
         slugify: slugify,

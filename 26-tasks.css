@@ -92,12 +92,12 @@
 
 .ai-task-url {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     max-width: 100%;
+    font-size: var(--ai-fs-meta);
+    line-height: 1.5;
     color: var(--ai-accent);
-    text-decoration: none;
+    text-decoration: underline;
+    overflow-wrap: anywhere;
 }
 
 .ai-task-url:hover {
@@ -175,10 +175,62 @@
     outline-offset: 2px;
 }
 
-/* 添加区：一条输入 + 一个按钮 */
+/* 折叠开关：有子条目才出现，宽度固定让勾选框对齐 */
+.ai-task-fold,
+.ai-task-fold-placeholder {
+    flex: none;
+    width: 16px;
+    min-height: 22px;
+    margin-top: 1px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: var(--ai-fs-meta);
+    line-height: 1;
+    color: var(--ai-ink-3);
+    cursor: pointer;
+}
+
+.ai-task-fold:hover {
+    color: var(--ai-ink);
+}
+
+.ai-task-fold:focus-visible {
+    outline: 2px solid var(--ai-ring);
+    outline-offset: 2px;
+}
+
+/* 层级：每深一层左侧让一格，子条目不再和父条目同高同宽 */
+.ai-task[data-depth="1"] {
+    margin-left: 20px;
+    border-left: 2px solid var(--ai-border);
+}
+
+.ai-task[data-depth="2"] {
+    margin-left: 40px;
+    border-left: 2px solid var(--ai-border);
+}
+
+/* 待确认的提案：确认键给主色，一眼看出该点哪个 */
+.ai-task-act-primary {
+    border-color: var(--ai-accent);
+    background: var(--ai-accent);
+    color: var(--ai-on-accent);
+}
+
+.ai-task-act-primary:hover {
+    background: var(--ai-accent-strong);
+    color: var(--ai-on-accent);
+}
+
+/* 添加区：一条输入 + 一个按钮；钉在计时视图底部 */
 .ai-task-add {
     display: flex;
     gap: 8px;
+    flex: none;
+    padding-top: 10px;
+    border-top: 1px solid var(--ai-border);
 }
 
 .ai-task-input {

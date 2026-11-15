@@ -16,7 +16,16 @@
     // 上下文开关是「每问带不带博客内容」，不跟配置一起等「保存配置」：
     // 单独落一个键，切一下立刻生效、下次打开还是这个状态
     var CONTEXT_KEY = 'ai-assistant.context';
+    /*
+     * 读类工具的轮次上限。工具预算的本意是拦住「反复展开小节」这类空转，
+     * 它花的是注入预算；而写清单/写画像这类工具不注入正文，不该和读共用额度——
+     * 共用会让「帮我记一下」在中途耗尽额度，画像与清单都没写进去。
+     */
     var MAX_TOOL_ROUNDS = 3;
+    /* 只动清单/画像的轮次另有上限：给两轮，防止模型反复写同一条
+     */
+    var MAX_WRITE_ROUNDS = 2;
+    var READING_TOOLS = { list_articles: 1, search_articles: 1, read_section: 1 };
     var MAX_INJECTED_CHARS = 16000;
     var SECTION_CHARS = 1200;
     var HEADINGS_LIMIT = 80;
@@ -670,10 +679,10 @@
     function strategyGuidance(remaining) {
         var lines = [];
         if (remaining > 0) {
-            lines.push('【工具预算】只剩 ' + remaining + ' 次工具机会了。');
+            lines.push('【工具预算】只剩 ' + remaining + ' 次阅读机会了（写清单/写画像不占这个额度）。');
             lines.push('1. 只读最相关的那一节就作答，不要再展开别的章节。');
         } else {
-            lines.push('【工具预算】已经用完，不会再有新的工具机会。');
+            lines.push('【工具预算】阅读机会已经用完（写清单/写画像仍然可以调用）。');
             // 预算为 0 时不能再让模型去「读一节」，但要点不变：
             // 就用已经读到的那一节作答，别再展开别的
             lines.push('1. 就用已经读到的最相关的那一节作答，不要再展开别的章节。');
@@ -774,6 +783,7 @@
         safeUi(AI.ui.beginProcess);
 
         var rounds = 0;
+        var writeRounds = 0;
         var injected = 0;
         var forceFinal = false;
         var finalReason = '';
@@ -1065,7 +1075,7 @@
                     break;
                 }
 
-                if (rounds >= MAX_TOOL_ROUNDS) {
+                if (rounds >= MAX_TOOL_ROUNDS || writeRounds >= MAX_WRITE_ROUNDS) {
                     // 工具预算用完：再给一轮「不许再调工具」，把已读到的内容写成答案。
                     // 直接 break 的后果是用户只看到一串工具卡、没有答案。
                     if (!buffer && holder.body && holder.body.parentNode) holder.body.remove();
@@ -1110,7 +1120,14 @@
 
                 // 这一轮真的执行了工具，轮次要计上：
                 // 计数放在执行之后，continue 的路径才不会漏算。
-                rounds += 1;
+                // 读了内容的轮次吃读预算；只写清单/画像的轮次单独计，
+                // 否则「帮我记一下」会被读类额度提前掐断。
+                var readThisRound = false;
+                for (var rt = 0; rt < toolCalls.length; rt++) {
+                    if (READING_TOOLS[toolCalls[rt].name]) { readThisRound = true; break; }
+                }
+                if (readThisRound) rounds += 1;
+                else writeRounds += 1;
 
                 if (injected > MAX_INJECTED_CHARS) {
                     // 注入预算用完也留一轮收尾：直接 break 的话用户同样只看到工具卡
@@ -1485,14 +1502,28 @@
      * 清单动作：访客自己写待办、勾掉、撤销、删掉自己写的条目。
      * AI 排的条目不给删除（47-tasks.js 的 remove 也会挡一道）。
      */
+    /* 手写一条待办：「加一步」点过的条目会成为它的父节点，加完自动清掉落点 */
     function addTaskFromPanel() {
         if (!AI.tasks) return;
         var input = AI.ui.refs.taskInput;
         if (!input) return;
         var title = String(input.value || '').trim();
         if (!title) return;
-        AI.tasks.add({ kind: 'todo', title: title, source: 'me', status: 'todo' });
+        var parentId = AI.ui.taskParentId ? AI.ui.taskParentId() : null;
+        AI.tasks.add({ kind: 'todo', title: title, source: 'me', status: 'todo', parentId: parentId || '' });
         input.value = '';
+        if (parentId) AI.ui.setTaskParent(null);
+    }
+
+    /* 待确认的 AI 提案：确认才转成待办 */
+    function confirmTask(id) {
+        if (!AI.tasks || !id) return;
+        AI.tasks.setStatus(id, 'todo');
+    }
+
+    /* 折叠/展开一条的子条目：只改视图状态，不动存储 */
+    function foldTask(id) {
+        AI.ui.renderTasks(AI.tasks ? AI.tasks.list() : []);
     }
 
     function toggleTask(id) {
@@ -1755,6 +1786,23 @@
         }
         if (action === 'task-add') {
             addTaskFromPanel();
+            return;
+        }
+        if (action === 'task-confirm') {
+            confirmTask(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-reject') {
+            deleteTask(hit.dataset.id);
+            return;
+        }
+        if (action === 'task-child') {
+            AI.ui.setTaskParent(hit.dataset.id);
+            if (AI.ui.refs.taskInput) AI.ui.refs.taskInput.focus();
+            return;
+        }
+        if (action === 'task-fold') {
+            AI.ui.toggleTaskFold(hit.dataset.id);
             return;
         }
         if (action === 'task-toggle') {

@@ -140,6 +140,8 @@
     /* 清单条目精简成「标识、标题、状态、时长」：清单工具的返回值计入注入预算 */
     function taskItem(item) {
         var res = { id: item.id, kind: item.kind, title: item.title, status: item.status };
+        // 层级要回给模型：不加 parentId 它没法在同一棵树里继续挂子条目
+        if (item.parentId) res.parentId = item.parentId;
         var duration = AI.tasks.elapsedOf(item);
         if (duration > 0) res.durationMs = Math.round(duration);
         return res;
@@ -544,7 +546,7 @@
         },
         {
             name: 'add_tasks',
-            description: '把一批条目加入访客的清单。items 每条给 title（标题），阅读任务另给 url（站内链接）与可选 categories、durationMs（预估时长，毫秒）；kind 默认 task。重要：未得到访客明确要求时只给建议、不得直接调本工具——先把要加的清单摆给访客看，等访客点头再落盘；访客说「都加上」「加吧」之后才调。完成可撤销，本工具面没有删除能力：清单条目只能由访客在面板里处理。',
+            description: '把一批条目加入访客的清单。items 每条给 title（标题），阅读任务另给 url（站内链接）与可选 categories、durationMs（预估时长，毫秒）；kind 默认 task。重要：未得到访客明确要求时只给建议、不得直接调本工具——先把要加的清单摆给访客看，等访客点头再落盘；访客说「都加上」「加吧」之后才调。完成可撤销，本工具面没有删除能力：清单条目只能由访客在面板里处理。要表达「先做这一步、再往下做这几步」时，用 parentId 把子条目挂到父条目下（最多 3 层）。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -557,7 +559,8 @@
                                 title: { type: 'string', description: '标题（必填）' },
                                 url: { type: 'string', description: '站内链接，阅读任务用；待办不要给' },
                                 categories: { type: 'array', items: { type: 'string' }, description: '可选：文章分类' },
-                                durationMs: { type: 'number', description: '可选：预估阅读时长（毫秒）' }
+                                durationMs: { type: 'number', description: '可选：预估阅读时长（毫秒）' },
+                                parentId: { type: 'string', description: '可选：父条目标识，用来把「做完这步再往下做哪几步」挂在一条下面；层级最多 3 层，缺省挂根上' }
                             },
                             required: ['title']
                         }

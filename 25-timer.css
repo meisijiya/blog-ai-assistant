@@ -20,10 +20,14 @@
     height: var(--ai-panel-h-timer);
 }
 
+/*
+ * 计时视图：头部（任务名/数字/控件）与底部输入条固定，只有清单区自己滚。
+ * 之前整块滚动，输入条跟着内容跑，条目一多就嵌在两行卡片之间。
+ */
 .ai-view-timer {
     padding: 16px;
     gap: 12px;
-    overflow-y: auto;
+    overflow: hidden;
     align-items: stretch;
 }
 
@@ -66,9 +70,13 @@
 }
 
 /* 任务列表容器：清单本身在 #63 落地，这里只留位置 */
+/* 清单区：自己滚，滚动条不占头部与输入条的位置 */
 .ai-timer-tasks {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex: 1 1 auto;
     min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
 }
