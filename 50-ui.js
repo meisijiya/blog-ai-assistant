@@ -1444,13 +1444,15 @@
         view.setAttribute('aria-label', '计时');
         view.hidden = true;
 
+        var head = el('div', 'ai-timer-head');
         var task = el('p', 'ai-timer-task', '未选择任务');
         refs.timerTask = task;
-        view.appendChild(task);
+        head.appendChild(task);
 
         var value = el('p', 'ai-timer-value', '00:00');
         refs.timerValue = value;
-        view.appendChild(value);
+        head.appendChild(value);
+        view.appendChild(head);
 
         var done = el('p', 'ai-timer-done', '时间到了。');
         done.hidden = true;
@@ -1655,8 +1657,11 @@
             undo.dataset.id = item.id;
             acts.appendChild(undo);
         }
-        /* AI 的提案用「不要」否掉，不再另给删除按钮 */
-        if (item.source !== 'ai') {
+        /*
+         * 删除对所有条目一视同仁：同一条清单里一半能删一半不能删，
+         * 访客得先记住这条是谁写的，认知负担比误删更贵。AI 的提案仍用「不要」否掉。
+         */
+        if (item.status !== 'pending') {
             var del = el('button', 'ai-task-act', '删除');
             del.type = 'button';
             del.dataset.act = 'task-delete';
@@ -1711,6 +1716,7 @@
             : AI.timer.format(data.elapsedMs);
         var task = snap.taskId && AI.tasks && AI.tasks.get(snap.taskId) ? AI.tasks.get(snap.taskId) : null;
         refs.timerTask.textContent = task ? task.title : '未选择任务';
+        refs.timerTask.title = task ? task.title : '';
         refs.timerStart.disabled = !!data.running;
         refs.timerStart.textContent = data.running ? '计时中' : '开始';
         refs.timerPause.disabled = !data.running;

@@ -31,18 +31,35 @@
     align-items: stretch;
 }
 
-/* 当前任务名：没选任务时给一句占位 */
+/*
+ * 任务名与计时数字同一行：左边条目、右边数字。
+ * 两行排下来白占一行高度，而条目名普遍比数字长，横向反而更省。
+ */
+.ai-timer-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* 当前任务名：没选任务时给一句占位；单行截断，完整标题在 title 里 */
 .ai-timer-task {
     margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: var(--ai-fs-label);
     line-height: 1.4;
     color: var(--ai-ink-2);
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 计时数字：本次升级新增的 28px 档，唯一一处 */
 .ai-timer-value {
     margin: 0;
+    flex: 0 0 auto;
     font-size: var(--ai-fs-timer);
     font-weight: 600;
     line-height: 1.15;
