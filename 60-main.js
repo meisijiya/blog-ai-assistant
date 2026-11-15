@@ -22,9 +22,11 @@
      * 共用会让「帮我记一下」在中途耗尽额度，画像与清单都没写进去。
      */
     var MAX_TOOL_ROUNDS = 3;
-    /* 只动清单/画像的轮次另有上限：给两轮，防止模型反复写同一条
+    /*
+     * 只动清单/画像的轮次另有上限：给三轮（列清单 → 写条目 → 补一条），
+     * 防止模型反复写同一条。
      */
-    var MAX_WRITE_ROUNDS = 2;
+    var MAX_WRITE_ROUNDS = 3;
     var READING_TOOLS = { list_articles: 1, search_articles: 1, read_section: 1 };
     var MAX_INJECTED_CHARS = 16000;
     var SECTION_CHARS = 1200;
