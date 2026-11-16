@@ -1827,6 +1827,15 @@
             if (pausedId && AI.tasks && AI.tasks.get(pausedId)) AI.tasks.endTiming(pausedId);
             return;
         }
+        if (action === 'timer-restart') {
+            // 再来一轮：按原目标时长重开一轮，条目从「已完成」退回「计时中」
+            var prev = AI.timer.getState();
+            AI.timer.restart();
+            if (prev.taskId && AI.tasks && AI.tasks.get(prev.taskId)) {
+                AI.tasks.resumeTiming(prev.taskId);
+            }
+            return;
+        }
         if (action === 'memory-add') {
             addMemoryRow();
             return;

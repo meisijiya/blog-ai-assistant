@@ -68,16 +68,33 @@
     font-feature-settings: "tnum" 1;
 }
 
-/* 到点提示：面板内的一行字，不弹系统通知 */
+/* 到点提示：计时数字下方一块显眼的卡片，不再是一行藏在阴影里的小字 */
 .ai-timer-done {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     margin: 0;
-    padding: 8px 10px;
-    border: 1px solid var(--ai-border-strong);
+    padding: 10px 12px;
+    border: 1px solid var(--ai-success);
     border-radius: var(--ai-r-control);
-    background: var(--ai-raised);
-    font-size: var(--ai-fs-label);
+    background: var(--ai-success-soft);
+    color: var(--ai-ink);
+}
+
+.ai-timer-done-msg {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--ai-fs-body);
+    font-weight: 600;
     line-height: 1.4;
     color: var(--ai-ink);
+}
+
+.ai-timer-restart {
+    flex: 0 0 auto;
 }
 /* 目标时长：一行说清「这一轮打算读多久」，排在数字与开始/暂停/重置之间 */
 .ai-timer-target {

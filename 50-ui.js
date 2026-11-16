@@ -1454,9 +1454,20 @@
         head.appendChild(value);
         view.appendChild(head);
 
-        var done = el('p', 'ai-timer-done', '时间到了。');
+        /*
+         * 到点提示：不再藏成一行小字，文案与「再来一轮」并排放在计时数字正下方。
+         */
+        var done = el('div', 'ai-timer-done');
         done.hidden = true;
+        var doneMsg = el('p', 'ai-timer-done-msg', '时间到了。');
+        var restart = el('button', 'ai-btn ai-timer-restart', '再来一轮');
+        restart.type = 'button';
+        restart.dataset.act = 'timer-restart';
+        done.appendChild(doneMsg);
+        done.appendChild(restart);
         refs.timerDone = done;
+        refs.timerDoneMsg = doneMsg;
+        refs.timerRestart = restart;
         view.appendChild(done);
 
         /*
@@ -1776,11 +1787,14 @@
         refs.timerStart.disabled = !!data.running;
         refs.timerStart.textContent = data.running ? '计时中' : '开始';
         refs.timerPause.disabled = !data.running;
-        refs.timerDone.hidden = !data.done;
+        // 没有目标时长就没有「再来一轮」的对象：倒计时到点后才给按钮
+        // 到点提示与「再来一轮」只在真正到点（已停表）后出现：归零但还没停表不算
+        refs.timerDone.hidden = !data.finished;
+        refs.timerRestart.hidden = !data.finished;
+        refs.timerRestart.disabled = !data.finished || snap.targetMs === null;
     }
 
     var timerUnsubscribe = null;
-
     function syncTimerTicking(on) {
         if (!AI.timer) return;
         if (on) {
