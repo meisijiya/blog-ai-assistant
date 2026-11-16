@@ -1,8 +1,8 @@
 /*
- * 计时胶囊：悬浮球上方那颗常驻小胶囊，写已跑多久。
+ * 计时胶囊：悬浮球上方那颗常驻小胶囊，写当前这一轮的时长。
  *
- * 显示口径：
- *   - 内容恒为已跑时长（AI.timer.format），跟面板计时视图同一份真相；
+ * 显示口径（与计时视图同一条，跟随模式）：
+ *   - 倒计时模式显示剩余时间，正计时模式显示已跑时长，都用 AI.timer.format；
  *   - 计时没开始、或已归零 → 胶囊隐藏，不在屏幕上占位；
  *   - 暂停/停止（没在跑但有累计）→ 次级色 + 文案「已停」。
  *
@@ -158,7 +158,9 @@
     function render() {
         if (!capsule) return;
         var snap = AI.timer.view();
-        var time = AI.timer.format(snap.elapsedMs);
+        // 显示口径跟计时视图同一条：倒计时显示剩余，正计时显示已跑
+        var ms = snap.remainingMs !== null ? snap.remainingMs : snap.elapsedMs;
+        var time = AI.timer.format(ms);
         if (capsule.getAttribute('data-time') !== time) {
             capsule.setAttribute('data-time', time);
             capsule.querySelector('.ai-capsule-time').textContent = time;

@@ -79,6 +79,79 @@
     line-height: 1.4;
     color: var(--ai-ink);
 }
+/* 目标时长：一行说清「这一轮打算读多久」，排在数字与开始/暂停/重置之间 */
+.ai-timer-target {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--ai-border);
+    border-radius: var(--ai-r-control);
+    background: var(--ai-field);
+}
+
+.ai-timer-target-label {
+    margin: 0;
+    flex: 0 0 auto;
+    font-size: var(--ai-fs-label);
+    line-height: 1.4;
+    color: var(--ai-ink-2);
+}
+
+/* 预设按钮挤在一行，选中态沿用 .ai-segmented 的口径 */
+.ai-timer-presets {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ai-timer-preset {
+    min-height: 34px;
+    padding: 6px 12px;
+    border-color: var(--ai-border-strong);
+}
+
+.ai-timer-preset[aria-checked="true"] {
+    background: var(--ai-surface);
+    color: var(--ai-ink);
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(29, 38, 44, 0.12);
+}
+
+/* 自定义分钟数：输入 + 开始，输入框收没打完的数 */
+.ai-timer-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ai-timer-target-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 76px;
+    margin: 0;
+    padding: 6px 10px;
+    min-height: 34px;
+    border: 1px solid var(--ai-border-strong);
+    border-radius: var(--ai-r-control);
+    background: var(--ai-surface);
+    font-family: inherit;
+    font-size: var(--ai-fs-label);
+    line-height: 1.4;
+    color: var(--ai-ink);
+}
+
+.ai-timer-target-input:focus-visible {
+    outline: none;
+    border-color: var(--ai-accent);
+}
+
+.ai-timer-custom .ai-btn {
+    flex: none;
+}
 
 .ai-timer-controls {
     display: flex;

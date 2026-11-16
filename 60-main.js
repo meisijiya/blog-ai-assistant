@@ -17,6 +17,13 @@
     // 单独落一个键，切一下立刻生效、下次打开还是这个状态
     var CONTEXT_KEY = 'ai-assistant.context';
     /*
+     * 目标时长：计时视图里那行预设与自定义分钟数，单独存一份本机偏好。
+     * 与计时状态（ai-assistant.timer）分开存：选时长是「下一轮怎么开始」的偏好，
+     * 计时状态是「这一轮跑到哪了」，生命周期不一样，不该互相覆盖。
+     */
+    var TARGET_KEY = 'ai-assistant.timer-target';
+    var TARGET_PRESETS = [10, 25, 45];
+    /*
      * 读类工具的轮次上限。工具预算的本意是拦住「反复展开小节」这类空转，
      * 它花的是注入预算；而写清单/写画像这类工具不注入正文，不该和读共用额度——
      * 共用会让「帮我记一下」在中途耗尽额度，画像与清单都没写进去。
@@ -136,6 +143,50 @@
         } catch (e) {
             /* 存不下只影响下次打开的默认值 */
         }
+    }
+
+    /*
+     * 目标时长偏好：预设分钟数 + 自定义分钟数，记在本机、跨标签页同步。
+     * 预设与自定义各存一个字段，选了预设时自定义保留，反之亦然，
+     * 访客两个都动过也不会互相吃掉。
+     */
+    function readTargetPrefs() {
+        var prefs = { preset: TARGET_PRESETS[0], custom: '' };
+        try {
+            var raw = window.localStorage.getItem(TARGET_KEY);
+            if (!raw) return prefs;
+            var saved = JSON.parse(raw);
+            if (!saved || typeof saved !== 'object') return prefs;
+            if (saved.preset !== undefined && TARGET_PRESETS.indexOf(saved.preset) !== -1) {
+                prefs.preset = saved.preset;
+            }
+            if (typeof saved.custom === 'string') prefs.custom = saved.custom;
+        } catch (e) {
+            /* 存不下或存坏了：按没存过处理，计时照旧可用 */
+        }
+        return prefs;
+    }
+
+    function saveTargetPrefs(prefs) {
+        try {
+            window.localStorage.setItem(TARGET_KEY, JSON.stringify(prefs));
+        } catch (e) {
+            /* 配额满或隐私模式：只是不跨刷新，不影响当前这一轮 */
+        }
+    }
+
+    /* 选完即开始：预设给整分钟数，自定义只收正数分钟，非法值直接不开始 */
+    function applyTarget(minutes) {
+        var value = Math.floor(Number(minutes));
+        if (!isFinite(value) || value <= 0) return null;
+        var prefs = readTargetPrefs();
+        var isPreset = TARGET_PRESETS.indexOf(value) !== -1;
+        prefs.preset = isPreset ? value : prefs.preset;
+        prefs.custom = isPreset ? prefs.custom : String(value);
+        saveTargetPrefs(prefs);
+        var view = AI.timer.start({ targetMs: value * 60000, mode: 'down' });
+        AI.ui.paintTargetRow(prefs);
+        return view;
     }
 
     function saveConfig() {
@@ -1750,6 +1801,18 @@
             AI.timer.start({ taskId: AI.timer.getState().taskId, targetMs: AI.timer.getState().targetMs });
             return;
         }
+        if (action === 'timer-target') {
+            // 选完目标时长就开倒计时：与点「开始」同一个状态机，只是这次带上目标时长
+            var minutes = hit.dataset.minutes;
+            if (minutes !== undefined) applyTarget(Number(minutes));
+            return;
+        }
+        if (action === 'timer-target-custom') {
+            // 自定义分钟数：从输入框读值，回车键与按钮走同一条路径
+            var targetInput = AI.ui.refs && AI.ui.refs.timerTargetInput;
+            if (targetInput && applyTarget(Number(targetInput.value))) targetInput.value = '';
+            return;
+        }
         if (action === 'timer-reset') {
             AI.timer.reset();
             // 计时器归零，挂在条目上的「计时中」也一起折回时长并退到待办
@@ -1902,6 +1965,16 @@
             if (event.isComposing || event.keyCode === 229) return;
             event.preventDefault();
             addTaskFromPanel();
+            return;
+        }
+        /*
+         * 自定义目标分钟数：回车按输入的分钟数开倒计时，输入非法则什么也不做。
+         */
+        if (event.key === 'Enter' && event.target === AI.ui.refs.timerTargetInput) {
+            if (event.isComposing || event.keyCode === 229) return;
+            event.preventDefault();
+            var minutes = Number(event.target.value);
+            if (applyTarget(minutes)) event.target.value = '';
             return;
         }
         /*
@@ -2285,6 +2358,10 @@
     // 挂的是纯函数，没有副作用，也不在生产路径上被调用
     AI.main = {
         currentContext: currentContext,
+        // 目标时长自证：门禁要能读回本机存的预设/自定义，也能走一遍真实的「选完即开始」
+        readTargetPrefs: readTargetPrefs,
+        applyTarget: applyTarget,
+        targetPresets: TARGET_PRESETS,
         buildSystemPrompt: buildSystemPrompt,
         // 分层自证：门禁要能逐字比对稳定前缀，并确认追加引导只挂在尾部
         systemLayers: buildSystemLayers,
@@ -2320,6 +2397,14 @@
             return { sessionId: state.sessionId, messages: list };
         }
     };
+
+    // 跨标签页：别的标签页改了目标时长，这一页的行也要跟着对齐
+    if (window.addEventListener) {
+        window.addEventListener('storage', function (event) {
+            if (event.key !== TARGET_KEY) return;
+            if (AI.ui && AI.ui.paintTargetRow) AI.ui.paintTargetRow();
+        });
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

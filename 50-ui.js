@@ -1459,6 +1459,45 @@
         refs.timerDone = done;
         view.appendChild(done);
 
+        /*
+         * 目标时长：一行预设按钮 + 一个自定义分钟数输入。
+         * 位置在头部数字与控件之间：它回答「这一轮打算读多久」，是开始之前要定的，
+         * 控件那行（开始/暂停/重置）管的是这一轮的进行，两行不该混在一起。
+         */
+        var target = el('div', 'ai-timer-target');
+        var label = el('p', 'ai-timer-target-label', '目标时长');
+        var presets = el('div', 'ai-timer-presets');
+        refs.timerTargetPresets = [];
+        [10, 25, 45].forEach(function (minutes) {
+            var btn = el('button', 'ai-btn ai-timer-preset', minutes + ' 分钟');
+            btn.type = 'button';
+            btn.dataset.act = 'timer-target';
+            btn.dataset.minutes = String(minutes);
+            btn.setAttribute('aria-checked', 'false');
+            presets.appendChild(btn);
+            refs.timerTargetPresets.push(btn);
+        });
+        var custom = el('div', 'ai-timer-custom');
+        var input = el('input', 'ai-timer-target-input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.placeholder = '自定义分钟';
+        input.setAttribute('aria-label', '自定义目标分钟数');
+        var customBtn = el('button', 'ai-btn', '开始');
+        customBtn.type = 'button';
+        customBtn.dataset.act = 'timer-target-custom';
+        custom.appendChild(input);
+        custom.appendChild(customBtn);
+        target.appendChild(label);
+        target.appendChild(presets);
+        target.appendChild(custom);
+        view.appendChild(target);
+        refs.timerTarget = target;
+        refs.timerTargetInput = input;
+        refs.timerTargetCustom = customBtn;
+        paintTargetRow();
+
+
         var controls = el('div', 'ai-timer-controls');
         var start = el('button', 'ai-btn ai-btn-primary', '开始');
         start.type = 'button';
@@ -1703,7 +1742,24 @@
         }
         renderTasks(AI.tasks.list());
     }
-
+    /*
+     * 目标时长那一行只画高亮与回填，不碰计时状态：
+     * 状态由 60-main.js 的 applyTarget 写，这里只对齐按钮选中态与输入框里的数。
+     */
+    function paintTargetRow(prefs) {
+        if (!refs.timerTargetPresets) return;
+        var data = prefs || (AI.main && AI.main.readTargetPrefs ? AI.main.readTargetPrefs() : { preset: 10, custom: '' });
+        for (var i = 0; i < refs.timerTargetPresets.length; i++) {
+            var minutes = Number(refs.timerTargetPresets[i].dataset.minutes);
+            var on = minutes === Number(data.preset);
+            refs.timerTargetPresets[i].setAttribute('aria-checked', on ? 'true' : 'false');
+        }
+        // 正在输入时不回填：回填会把访客没打完的数顶掉
+        if (refs.timerTargetInput && document.activeElement !== refs.timerTargetInput && data.custom !== '') {
+            refs.timerTargetInput.value = data.custom;
+        }
+    }
+ 
     /*
      * 计时显示只刷新数字，不改状态：真相在 55-timer.js 的时间戳对里。
      * 计时视图开着才跑刷新定时器，离开就停，别让后台空转。
@@ -2020,7 +2076,10 @@
             }
         }
         // 切到计时视图时对一次清单：别的标签页改过也能看到
-        if (view === 'timer') syncTasks();
+        if (view === 'timer') {
+            syncTasks();
+            paintTargetRow();
+        }
         // 计时刷新只在计时视图开着时跑，别让后台空转
         syncTimerTicking(view === 'timer');
         // 设置视图的面板更高，切换后重新落位，把它夹回视口内
@@ -3479,6 +3538,8 @@
         setOpen: setOpen,
         isOpen: isOpen,
         setState: setState,
+        // 目标时长行自证：预设高亮与自定义回填都要能从外面驱动
+        paintTargetRow: paintTargetRow,
         syncViewport: syncViewport,
         visibleHeight: visibleHeight,
         isNarrow: isNarrow,
