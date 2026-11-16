@@ -20,10 +20,11 @@
     var AI = window.AIAssistant = window.AIAssistant || {};
 
     var STORAGE_KEY = 'ai-assistant.remind';
+    /* 已提醒过的到点落盘：刷新/换文章后不再重放同一次提醒 */
+    var ACK_KEY = 'ai-assistant.remind.ack';
     var DEFAULT_KIND = 'gentle';
 
     var KINDS = ['gentle', 'force', 'off'];
-    var KIND_LABEL = { gentle: '温和', force: '强制', off: '关' };
 
     /* 标题与 favicon 的到点标记。favicon 是内联 SVG data URI，不引图片文件 */
     var TITLE_MARK = '⏰ 时间到了';
@@ -170,6 +171,8 @@
     }
 
     /* ------------------------------ 面板提示 ------------------------------ */
+
+    var HINT_TEXT = '时间到了，起来休息一下。';
 
     function paintPanel() {
         /* 面板提示挂在面板根上：任何视图都看得见，面板关着则无效果（标题标记兜底） */
