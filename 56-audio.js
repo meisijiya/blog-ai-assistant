@@ -25,9 +25,9 @@
      * 与音列走向，不靠任何音频文件。
      */
     var PRESETS = [
-        { minutes: 10, osc: 'sine', base: 523.25, seq: [1, 1.5, 2] },
-        { minutes: 25, osc: 'sine', base: 523.25, seq: [1, 1.5, 2] },
-        { minutes: 45, osc: 'sine', base: 523.25, seq: [1, 1.5, 2] }
+        { minutes: 10, osc: 'square', base: 523.25, seq: [1, 1.25, 1.5] },
+        { minutes: 25, osc: 'sine', base: 659.25, seq: [1, 1.5, 2] },
+        { minutes: 45, osc: 'triangle', base: 440, seq: [2, 1.5] }
     ];
 
     /* 每个音的时长与间隔：10 分钟最短，45 分钟最长 */
