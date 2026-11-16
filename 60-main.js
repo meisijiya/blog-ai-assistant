@@ -1669,7 +1669,7 @@
      */
     function closestDataNode(node) {
         if (!node || !node.closest) return null;
-        return node.closest('[data-act], [data-protocol], [data-state]');
+        return node.closest('[data-act], [data-protocol], [data-state], [data-remind]');
     }
 
     function onClick(event) {
@@ -1678,6 +1678,7 @@
         var action = hit && hit.dataset.act ? hit.dataset.act : null;
         var protocol = hit && hit.dataset.protocol ? hit.dataset.protocol : null;
         var view = hit && hit.dataset.state ? hit.dataset.state : null;
+        var remind = hit && hit.dataset.remind ? hit.dataset.remind : null;
         var refs = AI.ui.refs;
 
         /*
@@ -1722,6 +1723,12 @@
         if (view) {
             if (view === 'settings') fillSettings();
             AI.ui.setState(view);
+            return;
+        }
+
+        // 提醒强度分段控件靠 data-remind 识别（#74）
+        if (remind) {
+            if (AI.remind) AI.remind.setIntensity(remind);
             return;
         }
 
@@ -1834,6 +1841,8 @@
             return;
         }
         if (action === 'timer-restart') {
+            // 再来一轮就是确认到点：标题/图标标记此刻复原
+            if (AI.remind && typeof AI.remind.clear === 'function') AI.remind.clear();
             // 再来一轮：按原目标时长重开一轮，条目从「已完成」退回「计时中」
             var prev = AI.timer.getState();
             AI.timer.restart();

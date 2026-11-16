@@ -1337,6 +1337,7 @@
 
         wrap.appendChild(buildMemoryBlock());
         wrap.appendChild(buildAudioBlock());
+        wrap.appendChild(buildRemindBlock());
         // 「她是谁」放最后：只读信息，不该占最上面的视线
         wrap.appendChild(buildIdentity());
 
@@ -1361,6 +1362,51 @@
             });
         }
         return card.section;
+    }
+
+    /*
+     * 到点提醒强度（#74）：三档分段控件，状态在 AI.remind 里，这里只做读出与写入口。
+     * 默认温和；选择存本机独立键，跨标签页由 AI.remind 的 storage 订阅对齐。
+     */
+    function buildRemindBlock() {
+        var card = sectionCard('到点提醒');
+        card.section.classList.add('ai-section-remind');
+        card.card.appendChild(el('p', 'ai-prompt-note', '到点怎么提醒你：温和出音效与提示，强制再盖一层全屏遮罩，关档只留提示。'));
+        var label = el('span', 'ai-label', '提醒强度');
+        label.id = 'ai-remind-label';
+        card.card.appendChild(label);
+        var segs = el('div', 'ai-segmented');
+        segs.setAttribute('role', 'radiogroup');
+        segs.setAttribute('aria-labelledby', 'ai-remind-label');
+        [['gentle', '温和'], ['force', '强制'], ['off', '关']].forEach(function (item) {
+            var seg = el('button', 'ai-seg', item[1]);
+            seg.type = 'button';
+            seg.setAttribute('role', 'radio');
+            seg.dataset.remind = item[0];
+            seg.setAttribute('aria-checked', 'false');
+            segs.appendChild(seg);
+        });
+        card.card.appendChild(segs);
+        // 面板在 61-remind 之前挂载：先按默认温和画选中态，
+        // 61-remind 载入后再调 paintRemindIntensity 对齐真实强度（它自己订阅存储变化）。
+        paintRemindIntensity();
+        return card.section;
+    }
+
+    /*
+     * 提醒强度选中态对齐：读 AI.remind 的当前档，只画不改。
+     * 状态真相在 61-remind，订阅也由它做（它比面板晚载入），这里只负责画。
+     */
+    function paintRemindIntensity() {
+        var kind = (AI.remind && typeof AI.remind.intensity === 'function')
+            ? AI.remind.intensity()
+            : 'gentle';
+        var section = document.querySelector('.ai-section-remind');
+        if (!section) return;
+        var nodes = section.querySelectorAll('.ai-seg');
+        for (var i = 0; i < nodes.length; i++) {
+            nodes[i].setAttribute('aria-checked', nodes[i].dataset.remind === kind ? 'true' : 'false');
+        }
     }
 
     function buildComposer() {
@@ -3631,6 +3677,7 @@
         showBubble: showBubble,
         hideBubble: hideBubble,
         openPresetList: openPresetList,
+        paintRemindIntensity: paintRemindIntensity,
         closePresetList: closePresetList,
         positionPresetList: positionPresetList,
         renderMarkdown: renderMarkdown,

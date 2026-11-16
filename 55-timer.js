@@ -231,6 +231,15 @@
         state.accumulatedMs = elapsed;
         state.startedAt = null;
         writeStorage();
+        // 到点提醒分派（#74）：只有真正触发到点的那一次才分派，
+        // 看门狗与跨标签同步都不会重复触发，这里也最不容易重复。
+        if (AI.remind && typeof AI.remind.dispatch === 'function') {
+            AI.remind.dispatch('arrival', {
+                taskId: state.taskId,
+                minutes: state.targetMs ? state.targetMs / 60000 : null,
+                accumulatedMs: elapsed
+            });
+        }
         // 条目流转可重入：条目已是「已完成」就不再写
         if (state.taskId && AI.tasks && typeof AI.tasks.finishTiming === 'function') {
             AI.tasks.finishTiming(state.taskId, elapsed);
