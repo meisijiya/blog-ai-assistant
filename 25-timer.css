@@ -43,6 +43,55 @@
     min-width: 0;
 }
 
+/*
+ * 计时区：头部与暂停标签的共同容器。
+ * 暂停时这一块要「看得见地在停」：数字转次级色、标签露出来、边框描一圈。
+ * 边框默认透明，占位不变，暂停时描边不会让内容跳一下。
+ */
+.ai-timer-zone {
+    /*
+     * 标签与头部同一行排：整块只占一行高度，不挤占清单区的可滚动高度
+     * （清单区高度有限，多一行下来能完整看到的条目就少一条）。
+     */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: var(--ai-r-control);
+}
+
+/* 头部在计时区里占满一行，把标签挤到最右：不换行、不溢出 */
+.ai-timer-zone .ai-timer-head {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ai-timer-zone.is-paused {
+    border-color: var(--ai-border-strong);
+    background: var(--ai-field);
+}
+
+/* 暂停时数字转次级色：一眼看出这一轮停着 */
+.ai-timer-zone.is-paused .ai-timer-value {
+    color: var(--ai-ink-2);
+}
+
+/* 「已暂停」标签：排在数字右侧，只在暂停态露出来 */
+.ai-timer-paused-tag {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: var(--ai-r-pill);
+    background: var(--ai-raised);
+    color: var(--ai-ink-2);
+    font-size: var(--ai-fs-meta);
+    line-height: 1.4;
+}
+
+/* 「结束本轮」：与「暂停」分开的一个动作，按钮不抢主按钮的位置 */
+.ai-timer-end {
+    margin-left: auto;
+}
+
 /* 当前任务名：没选任务时给一句占位；单行截断，完整标题在 title 里 */
 .ai-timer-task {
     margin: 0;

@@ -1827,6 +1827,16 @@
             if (pausedId && AI.tasks && AI.tasks.get(pausedId)) AI.tasks.endTiming(pausedId);
             return;
         }
+        if (action === 'timer-end-round') {
+            /*
+             * 结束本轮：停表 + 当前条目转「已完成」。
+             * 与「暂停」是两个动作：暂停是歇一会儿（条目退回待办、这一轮还在），
+             * 结束本轮是这一轮收工。条目流转复用 AI.tasks.finishTiming，
+             * 与到点自动流转同一条规则，不另写一套状态迁移。
+             */
+            AI.timer.endRound();
+            return;
+        }
         if (action === 'timer-restart') {
             // 再来一轮：按原目标时长重开一轮，条目从「已完成」退回「计时中」
             var prev = AI.timer.getState();
