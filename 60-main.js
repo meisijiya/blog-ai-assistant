@@ -1798,7 +1798,13 @@
             return;
         }
         if (action === 'timer-start') {
+            // 在访客这次点击里解锁音频：浏览器只认用户手势里创建的上下文
+            if (AI.audio && AI.audio.unlock) AI.audio.unlock();
             AI.timer.start({ taskId: AI.timer.getState().taskId, targetMs: AI.timer.getState().targetMs });
+            return;
+        }
+        if (action === 'audio-toggle') {
+            if (AI.audio) AI.audio.setMuted(!AI.audio.isMuted());
             return;
         }
         if (action === 'timer-target') {

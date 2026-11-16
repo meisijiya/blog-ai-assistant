@@ -1336,10 +1336,31 @@
         wrap.appendChild(prompt.section);
 
         wrap.appendChild(buildMemoryBlock());
+        wrap.appendChild(buildAudioBlock());
         // 「她是谁」放最后：只读信息，不该占最上面的视线
         wrap.appendChild(buildIdentity());
 
         return wrap;
+    }
+
+    /* 到点音效开关：状态在 AI.audio 里，这里只做读出与写入口 */
+    function buildAudioBlock() {
+        var card = sectionCard('到点音效');
+        card.section.classList.add('ai-section-audio');
+        card.card.appendChild(el('p', 'ai-prompt-note', '到点响一声。静音后只留面板提示与标题标记，其余提醒照常。'));
+        var toggle = el('button', 'ai-audio-toggle');
+        toggle.type = 'button';
+        toggle.dataset.act = 'audio-toggle';
+        toggle.setAttribute('role', 'switch');
+        card.card.appendChild(toggle);
+        if (AI.audio && AI.audio.subscribe) {
+            // 订阅一次拿全：按钮文案与 aria 状态跟着同一份真相走
+            AI.audio.subscribe(function (muted) {
+                toggle.setAttribute('aria-checked', muted ? 'false' : 'true');
+                toggle.textContent = muted ? '已静音' : '到点响一声';
+            });
+        }
+        return card.section;
     }
 
     function buildComposer() {
