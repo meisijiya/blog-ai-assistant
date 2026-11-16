@@ -29,7 +29,9 @@
             taskId: null,
             startedAt: null,
             accumulatedMs: 0,
-            targetMs: null
+            targetMs: null,
+            // 用户按下暂停（可恢复），与「结束本轮」（本轮收工）是两回事
+            paused: false
         };
     }
 
@@ -49,6 +51,7 @@
             : null;
         // 倒计时必须有目标时长，否则退化成正计时
         if (next.mode === 'down' && next.targetMs === null) next.mode = 'up';
+        next.paused = raw.paused === true;
         return next;
     }
 
@@ -106,6 +109,8 @@
             elapsedMs: elapsed,
             remainingMs: remaining,
             running: state.startedAt !== null,
+            // 暂停态：用户按下暂停、还没恢复。界面据此给暂停专属视觉
+            paused: state.paused === true,
             done: remaining !== null && remaining <= 0,
             // 到点是发生过的一次性事件：倒计时归零且已停表才算数。
             // 归零但看门狗还没轮到停表时不算数：提示不该比停表先到。
@@ -149,15 +154,19 @@
         }
         // 已在跑就继续跑：重复点「开始」不该把已跑时长清零
         if (state.startedAt === null) state.startedAt = Date.now();
+        // 恢复即离开暂停态：视觉回到计时中口径
+        state.paused = false;
         writeStorage();
         ensureWatchdog();
         emit();
         return view();
     }
     function pause() {
+        // 只有真的在跑才落暂停态：停过的表再按一次暂停不该假装「刚暂停」
         if (state.startedAt !== null) {
             state.accumulatedMs = elapsedOf(state, Date.now());
             state.startedAt = null;
+            state.paused = true;
         }
         writeStorage();
         ensureWatchdog();
@@ -168,6 +177,7 @@
     function reset() {
         state.startedAt = null;
         state.accumulatedMs = 0;
+        state.paused = false;
         writeStorage();
         ensureWatchdog();
         emit();
@@ -261,6 +271,26 @@
     }
 
     /*
+     * 结束本轮：这一轮到此为止（与「暂停」不同：暂停可恢复，结束是收尾）。
+     * 停表口径与到点一致：已跑时长折进累计、清空起始时刻，目标时长留着，
+     * 不自动开新一轮。条目流转复用 AI.tasks.finishTiming —— 与到点自动流转
+     * 同一条规则，不另写一套状态迁移。
+     */
+    function endRound() {
+        var elapsed = elapsedOf(state, Date.now());
+        state.accumulatedMs = elapsed;
+        state.startedAt = null;
+        state.paused = false;
+        writeStorage();
+        ensureWatchdog();
+        if (state.taskId && AI.tasks && typeof AI.tasks.finishTiming === 'function') {
+            AI.tasks.finishTiming(state.taskId, elapsed);
+        }
+        emit();
+        return view();
+    }
+
+    /*
      * 显示刷新：只刷新显示，不落盘、不累加。
      * 节流后停跳的秒数在重算时一并补上。
      */
@@ -314,6 +344,7 @@
         startTicking: startTicking,
         finish: finish,
         restart: restart,
+        endRound: endRound,
         stopTicking: stopTicking
     };
 })();

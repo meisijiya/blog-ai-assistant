@@ -1511,6 +1511,12 @@
         view.setAttribute('aria-label', '计时');
         view.hidden = true;
 
+        /*
+         * 计时区：头部（任务名/数字）与暂停标签一起放在这一块里。
+         * 暂停时这一块要给出专属视觉（次级色数字 + 「已暂停」标签 + 边框强调），
+         * 所以包一层：头部内部只能有任务名与数字两个子节点，标签放不进头部。
+         */
+        var zone = el('div', 'ai-timer-zone');
         var head = el('div', 'ai-timer-head');
         var task = el('p', 'ai-timer-task', '未选择任务');
         refs.timerTask = task;
@@ -1519,7 +1525,14 @@
         var value = el('p', 'ai-timer-value', '00:00');
         refs.timerValue = value;
         head.appendChild(value);
-        view.appendChild(head);
+        zone.appendChild(head);
+
+        var pausedTag = el('span', 'ai-timer-paused-tag', '已暂停');
+        pausedTag.hidden = true;
+        zone.appendChild(pausedTag);
+        refs.timerZone = zone;
+        refs.timerPausedTag = pausedTag;
+        view.appendChild(zone);
 
         /*
          * 到点提示：不再藏成一行小字，文案与「再来一轮」并排放在计时数字正下方。
@@ -1586,12 +1599,21 @@
         var reset = el('button', 'ai-btn', '重置');
         reset.type = 'button';
         reset.dataset.act = 'timer-reset';
+        /*
+         * 结束本轮：与「暂停」分开的一个动作。暂停是歇一会儿（可恢复），
+         * 结束本轮是这一轮到此为止（条目转已完成）。
+         */
+        var endRound = el('button', 'ai-btn ai-timer-end', '结束本轮');
+        endRound.type = 'button';
+        endRound.dataset.act = 'timer-end-round';
         controls.appendChild(start);
         controls.appendChild(pause);
         controls.appendChild(reset);
+        controls.appendChild(endRound);
         refs.timerStart = start;
         refs.timerPause = pause;
         refs.timerReset = reset;
+        refs.timerEndRound = endRound;
         view.appendChild(controls);
 
         var list = el('div', 'ai-timer-tasks');
@@ -1854,6 +1876,17 @@
         refs.timerStart.disabled = !!data.running;
         refs.timerStart.textContent = data.running ? '计时中' : '开始';
         refs.timerPause.disabled = !data.running;
+        /*
+         * 暂停视觉：暂停态要给三样东西——次级色数字、「已暂停」标签、计时区边框强调。
+         * 恢复后全部回到计时中口径（类名摘掉、标签藏起来）。
+         */
+        var paused = !!data.paused;
+        if (refs.timerZone) refs.timerZone.classList.toggle('is-paused', paused);
+        if (refs.timerPausedTag) refs.timerPausedTag.hidden = !paused;
+        if (refs.timerEndRound) {
+            // 没有当前条目时「结束本轮」无事可做：条目流转要有个对象
+            refs.timerEndRound.disabled = !snap.taskId;
+        }
         // 没有目标时长就没有「再来一轮」的对象：倒计时到点后才给按钮
         // 到点提示与「再来一轮」只在真正到点（已停表）后出现：归零但还没停表不算
         refs.timerDone.hidden = !data.finished;
