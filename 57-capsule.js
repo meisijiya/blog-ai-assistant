@@ -3,8 +3,9 @@
  *
  * 显示口径（与计时视图同一条，跟随模式）：
  *   - 倒计时模式显示剩余时间，正计时模式显示已跑时长，都用 AI.timer.format；
- *   - 计时没开始、或已归零 → 胶囊隐藏，不在屏幕上占位；
- *   - 暂停/停止（没在跑但有累计）→ 次级色 + 文案「已停」。
+ *   - 到点（倒计时跑满且已停表）→ 强调色 + 文案「到点」；
+ *   - 暂停/停止（没在跑但有累计）→ 次级色 + 文案「已停」；
+ *   - 计时没开始、且没有任何累计 → 整颗隐藏，不在屏幕上占位。
  *
  * 避障：候选顺序固定「正上方 → 左上 → 右上 → 视口左上角 → 视口右上角」，
  * 每个候选过两道检查（矩形完整在视口内、与面板/目录球/其它浮层不相交），
@@ -165,13 +166,16 @@
             capsule.setAttribute('data-time', time);
             capsule.querySelector('.ai-capsule-time').textContent = time;
         }
-        var state = snap.running ? '' : '已停';
+        /* 到点是第三种显示态：数字停在 00:00，但要让人看出「这一轮到点了」 */
+        var arrived = !!snap.finished;
+        var state = arrived ? '到点' : (snap.running ? '' : '已停');
         if (capsule.getAttribute('data-state') !== state) {
             capsule.setAttribute('data-state', state);
             capsule.querySelector('.ai-capsule-state').textContent = state;
         }
-        capsule.classList.toggle('is-stopped', !snap.running);
-        /* 没开始/已归零时不占位，直接整颗藏起来 */
+        capsule.classList.toggle('is-stopped', !snap.running && !arrived);
+        capsule.classList.toggle('is-arrived', arrived);
+        /* 没开始且没有任何累计时不占位，直接整颗藏起来 */
         capsule.hidden = !(snap.running || snap.elapsedMs > 0);
     }
 

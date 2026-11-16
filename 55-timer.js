@@ -264,6 +264,8 @@
         if (state.mode !== 'down' || state.targetMs === null) return view();
         state.accumulatedMs = 0;
         state.startedAt = Date.now();
+        // 与 start() 同口径：重开一轮就是离开暂停态
+        state.paused = false;
         writeStorage();
         ensureWatchdog();
         emit();
@@ -334,7 +336,6 @@
         STORAGE_KEY: STORAGE_KEY,
         getState: getState,
         elapsedMs: elapsedMs,
-        elapsedOf: elapsedOf,
         format: format,
         view: view,
         start: start,

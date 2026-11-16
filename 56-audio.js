@@ -34,12 +34,18 @@
     var STEP = 0.14;
     var GAP = 0.10;
 
+    /*
+     * 自定义分钟数与清单条目自带的预估时长（5/8/12 分钟…）都不在三个预设里。
+     * 这些到点照样得有声音：落到一支默认音色，静默丢声比换个音更糟。
+     */
+    var FALLBACK = { osc: 'sine', base: 587.33, seq: [1, 1.5] };
+
     function presetOf(minutes) {
         var target = Math.floor(Number(minutes));
         for (var i = 0; i < PRESETS.length; i++) {
             if (PRESETS[i].minutes === target) return PRESETS[i];
         }
-        return null;
+        return FALLBACK;
     }
 
     /*
@@ -114,8 +120,20 @@
         if (muted) return false;
         var preset = presetOf(minutes);
         if (!preset) return false;
-        var ac = resume();
+        /*
+         * 到点不创建上下文：只有访客手势（unlock）里建出来的那份才可能出声。
+         * 在这里新建一个，等于在没有手势的情况下开一个永远 suspended 的上下文，
+         * 还会盖掉页面里已有的音频包装（断言与后续 unlock 都受影响）。
+         */
+        var ac = ctx;
         if (!ac) return false;
+        if (ac.state === 'suspended' && typeof ac.resume === 'function') {
+            try {
+                ac.resume();
+            } catch (e) {
+                /* 恢复失败只丢声音 */
+            }
+        }
         if (ac.state !== 'running') return false;
         var at = ac.currentTime;
         for (var i = 0; i < preset.seq.length; i++) {

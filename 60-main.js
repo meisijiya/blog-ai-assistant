@@ -184,6 +184,12 @@
         prefs.preset = isPreset ? value : prefs.preset;
         prefs.custom = isPreset ? prefs.custom : String(value);
         saveTargetPrefs(prefs);
+        /*
+         * 换目标就是新一轮：不清掉上一轮的已跑时长，旧时长会直接抵掉新目标
+         * （正计时跑了 20 分钟再点「10 分钟」会立刻到点）。
+         */
+        AI.timer.reset();
+        if (AI.remind && AI.remind.clear) AI.remind.clear();
         var view = AI.timer.start({ targetMs: value * 60000, mode: 'down' });
         AI.ui.paintTargetRow(prefs);
         return view;
@@ -1807,7 +1813,18 @@
         if (action === 'timer-start') {
             // 在访客这次点击里解锁音频：浏览器只认用户手势里创建的上下文
             if (AI.audio && AI.audio.unlock) AI.audio.unlock();
-            AI.timer.start({ taskId: AI.timer.getState().taskId, targetMs: AI.timer.getState().targetMs });
+            if (AI.remind && AI.remind.clear) AI.remind.clear();
+            var st = AI.timer.getState();
+            /*
+             * 到点之后再按「开始」是开新一轮：已跑时长已经跑满目标，不清掉的话
+             * 这一轮开出来瞬间又到点；条目还停在「已完成」也会把新一轮时长丢掉。
+             */
+            if (AI.timer.view().finished) {
+                AI.timer.reset();
+                var doneItem = st.taskId && AI.tasks && AI.tasks.get(st.taskId);
+                if (doneItem && doneItem.status === 'done') AI.tasks.resumeTiming(st.taskId);
+            }
+            AI.timer.start({ taskId: st.taskId, targetMs: st.targetMs });
             return;
         }
         if (action === 'audio-toggle') {
@@ -1827,6 +1844,8 @@
             return;
         }
         if (action === 'timer-reset') {
+            // 重置是访客主动收口：到点标记与面板提示一起复原
+            if (AI.remind && AI.remind.clear) AI.remind.clear();
             AI.timer.reset();
             // 计时器归零，挂在条目上的「计时中」也一起折回时长并退到待办
             var resetId = AI.timer.getState().taskId;
@@ -2395,7 +2414,7 @@
         // 目标时长自证：门禁要能读回本机存的预设/自定义，也能走一遍真实的「选完即开始」
         readTargetPrefs: readTargetPrefs,
         applyTarget: applyTarget,
-        targetPresets: TARGET_PRESETS,
+    
         buildSystemPrompt: buildSystemPrompt,
         // 分层自证：门禁要能逐字比对稳定前缀，并确认追加引导只挂在尾部
         systemLayers: buildSystemLayers,

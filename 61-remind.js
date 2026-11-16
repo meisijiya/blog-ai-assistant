@@ -185,7 +185,34 @@
             hint.setAttribute('role', 'status');
             panel.appendChild(hint);
         }
-        hint.textContent = '时间到了，起来休息一下。';
+        hint.textContent = HINT_TEXT;
+    }
+
+    /* 提示不是常驻广告：确认到点或开新一轮时摘掉，别让面板一直挂着「时间到了」 */
+    function clearPanelHint() {
+        if (!AI.ui || !AI.ui.refs || !AI.ui.refs.panel) return;
+        var hint = AI.ui.refs.panel.querySelector('.ai-remind-hint');
+        if (hint && hint.parentNode) hint.parentNode.removeChild(hint);
+    }
+
+    /* 已提醒过的到点：落盘一份，刷新/换文章后不再重放同一次提醒 */
+    function readAck() {
+        try {
+            var raw = window.localStorage.getItem(ACK_KEY);
+            var list = raw ? JSON.parse(raw) : [];
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            /* 存储坏了按没有提醒过处理：宁可多提醒一次，也别让到点彻底失联 */
+            return [];
+        }
+    }
+
+    function writeAck(list) {
+        try {
+            window.localStorage.setItem(ACK_KEY, JSON.stringify(list.slice(-20)));
+        } catch (e) {
+            /* 存不下就只在本次会话内去重 */
+        }
     }
 
     /* ------------------------------ 分派 ------------------------------ */
@@ -195,12 +222,23 @@
         var minutes = o.minutes;
         var key = o.taskId ? String(o.taskId) + '@' + o.accumulatedMs : null;
 
-        /* 幂等：同一次到点只分派一次。没有 taskId 的到点（不挂条目的倒计时）
-           每次调用都算一次，由调用方保证不重复调。 */
+        /*
+         * 幂等：同一次到点只分派一次。内存账挡同一次加载内的重复调用；
+         * 落盘账只给「打开页面补分派」用（见文件末尾），这样访客确认过的那次到点
+         * 换文章、刷新都不会重放，而显式分派仍按调用方语义执行。
+         * 没有 taskId 的到点（不挂条目的倒计时）由调用方保证不重复调。
+         */
         if (key && dispatched[key]) {
             return { dispatched: false, kind: current, reason: 'already' };
         }
-        if (key) dispatched[key] = true;
+        if (key) {
+            dispatched[key] = true;
+            var ack = readAck();
+            if (ack.indexOf(key) === -1) {
+                ack.push(key);
+                writeAck(ack);
+            }
+        }
 
         var did = current;
         /* 温和与强制都出声：关档无音 */
@@ -215,17 +253,12 @@
         return { dispatched: true, kind: current, sound: did !== 'off', overlay: did === 'force' };
     }
 
-    /* 到点确认：复原标记、清幂等账，下一轮到点能再分派 */
-    function clear(opts) {
+    /* 到点确认：复原标记与面板提示，清内存账，下一轮到点能再分派 */
+    function clear() {
         clearMark();
-        var keep = (opts && opts.keepArrival) ? dispatched : {};
-        dispatched = keep;
-        return true;
-    }
-
-    function reset() {
+        clearPanelHint();
         dispatched = {};
-        clearMark();
+        return true;
     }
 
     /* ------------------------------ 到点接线 ------------------------------ */
@@ -239,11 +272,17 @@
      * 分派被跳过。这里读一次终态补分派，访客打开页面不会看到「归零却没人提醒」。
      */
     if (AI.timer && typeof AI.timer.view === 'function' && AI.timer.view().finished) {
-        dispatch('arrival', {
-            taskId: AI.timer.getState().taskId,
-            minutes: AI.timer.getState().targetMs ? AI.timer.getState().targetMs / 60000 : null,
-            accumulatedMs: AI.timer.view().elapsedMs
-        });
+        var arrival = AI.timer.view();
+        var arrivalTask = AI.timer.getState().taskId;
+        var arrivalKey = arrivalTask ? String(arrivalTask) + '@' + arrival.elapsedMs : null;
+        /* 这轮到点已经提醒过了（刷新/换文章前就分派过）：补分派会把遮罩与标记重放一遍 */
+        if (!arrivalKey || readAck().indexOf(arrivalKey) === -1) {
+            dispatch('arrival', {
+                taskId: arrivalTask,
+                minutes: AI.timer.getState().targetMs ? AI.timer.getState().targetMs / 60000 : null,
+                accumulatedMs: arrival.elapsedMs
+            });
+        }
     }
 
     /*
@@ -261,13 +300,11 @@
 
     AI.remind = {
         STORAGE_KEY: STORAGE_KEY,
-        KINDS: KINDS,
         intensity: intensity,
         setIntensity: setIntensity,
         subscribe: subscribe,
         dispatch: dispatch,
         clear: clear,
-        reset: reset,
         applyMark: applyMark,
         clearMark: clearMark,
         isMarked: isMarked

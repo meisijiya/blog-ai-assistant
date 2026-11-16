@@ -427,17 +427,16 @@
             return item;
         }
         /*
-         * 这一轮跑了多久以计时器为准（roundMs）：条目的计时起点与计时器是两份账，
-         * 到点那一刻计时器手里的是准的，折进条目才不会差出一截。
+         * 折进条目只做增量，不覆盖：同一条目会跑很多轮，覆盖会把之前几轮的时长抹掉。
+         * 有计时起点就按起点折算（与 endTiming 同一条规则）；起点丢了（换标签页、
+         * 刷新）才退回计时器手里的这一轮时长。
          */
-        if (typeof roundMs === 'number' && isFinite(roundMs) && roundMs > 0) {
-            item.accumulatedMs = Math.floor(roundMs);
-        } else {
-            var since = runningSince[id];
-            if (since) {
-                var delta = now() - since;
-                if (delta > 0) item.accumulatedMs += delta;
-            }
+        var since = runningSince[id];
+        if (since) {
+            var delta = now() - since;
+            if (delta > 0) item.accumulatedMs = (item.accumulatedMs || 0) + delta;
+        } else if (typeof roundMs === 'number' && isFinite(roundMs) && roundMs > 0) {
+            item.accumulatedMs = (item.accumulatedMs || 0) + Math.floor(roundMs);
         }
         delete runningSince[id];
         if (runningId === id) runningId = null;
