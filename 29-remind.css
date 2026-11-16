@@ -112,3 +112,20 @@ body.dark-theme .ai-overlay-exit:hover {
     outline: 2px solid #2f6b27;
     outline-offset: 2px;
 }
+
+/* 到点面板提示（#74）：挂在面板根上，任何视图都看得见；面板关着时由标题标记兜底 */
+.ai-remind-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ai-success);
+    border-radius: var(--ai-r-control);
+    background: var(--ai-success-soft);
+    color: var(--ai-ink);
+    font-family: var(--ai-font);
+    font-size: var(--ai-fs-body);
+    font-weight: 600;
+    line-height: 1.4;
+}
